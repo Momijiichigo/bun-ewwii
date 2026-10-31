@@ -1,0 +1,207 @@
+
+
+;; Wallpaper Widgets
+(include "./yuck/wallp_widgets/default.yuck")
+
+(include "./yuck/frutiger_bar/bar_music.yuck")
+
+;; Desktop Bar
+(defwindow frutiger_bar [screen]
+  :geometry
+    (geometry
+      :x "0%"
+      ;; currently the variable is not in the scope
+      ;; so the code below gives an error
+
+      ; :y {is_one_window_wspace ? "0px" : "2px"}
+      ; :width {
+      ;   is_one_window_wspace ? "100%" : "99.5%"
+      ; }
+      :y "0px"
+      :width "100%"
+      :height "10px"
+      :anchor "top center"
+    )
+  :stacking "fg"
+  :windowtype "toolbar"
+  :exclusive true
+  :namespace "eww-blur"
+  (box
+    :class "frutiger_bar"
+    ; :style "border-radius: ${is_one_window_wspace ? "0px" : "8px"}"
+    :orientation "h"
+    (box
+      :orientation "h" 
+      :space-evenly false  
+      :halign "start"
+      :class "left_modules"
+      (frut_workspaces :screen screen)
+    )
+
+    (box
+      :orientation "h" 
+      :space-evenly false
+      :halign "center"
+      :class "center_modules"
+      (frut_bar_music)
+    )
+    (frut_right)
+  )
+)
+
+(defwidget frut_workspaces [screen]
+  (box
+    :class "works"
+    :orientation "h"
+    :spacing 5
+    :space-evenly false
+    (for entry in "${wspaces[screen]}"
+      (button
+        :class "workspace-dot ${entry == current_workspace ? 'active' : ''}"
+        :onclick 
+          "hyprctl dispatch 'hl.dsp.focus({ workspace = ${entry} })'"
+        "${meta_pressed ? entry : " "}"
+      )
+    )
+  )
+)
+
+(defwidget frut_sep []
+  (box :vexpand "true" :hexpand "true" :width "2"  :class "sep" 
+
+  )
+)
+
+(include "./yuck/bar_widgets/bright.yuck")
+(include "./yuck/bar_widgets/wifi.yuck")
+(include "./yuck/bar_widgets/bluetooth.yuck")
+
+(include "./yuck/bar_widgets/battery.yuck")
+(include "./yuck/bar_widgets/memory.yuck")
+(include "./yuck/bar_widgets/cpu.yuck")
+
+(include "./yuck/bar_widgets/clock.yuck")
+
+(include "./yuck/bar_widgets/notification.yuck")
+
+(defwidget frut_right []
+  (box
+    :orientation "h"
+    ; :space-evenly true  
+    ; :spacing 1
+    :space-evenly false
+    :halign "end"
+    :class "right_modules"
+    ; (bright)
+    ; (volume)
+    (button
+      :class "glass_block"
+      :onclick "rfkill unblock bluetooth && alacritty --class float --command bluetuith &"
+
+      :style "padding: 0px 1em;"
+      ;; Add `$USER ALL=(ALL) NOPASSWD: /usr/bin/rfkill` to `/etc/sudoers.d/rfkill-unblock`
+      ;;  to make password-exemption of rfkill command
+      (label
+        :class "icon bluetooth"
+        :style "color: ${bluetooth_icon_color};" 
+        :text bluetooth_icon
+        :tooltip bluetooth_connected_dev
+      )
+    )
+
+    (button
+      :class "glass_block"
+      :onclick "alacritty --class nmtui --command nmtui &"
+
+      :style "padding: 0px 1em;"
+      (label
+        :class "icon wifi"
+        :style "color: ${WLAN_ICON_COLOR};" 
+        :tooltip ESSID_WLAN
+        :text "${WLAN_ICON} "
+      )
+
+    )
+
+    (systray
+      :class "systray"
+      ; :spacing 10
+      :icon-size 13
+    )
+    
+    (button
+      :class "glass_block sleep_block_button ${dont_sleep ? "dont_sleep" : "allow_sleep"}"
+      :onclick "eww update dont_sleep=${!dont_sleep}"
+      (label
+        :tooltip {dont_sleep ? "Don't allow system to sleep" : "Allow system to sleep"}
+        ; :style {dont_sleep ? "color: white;" : "color: black;"}
+        :text {dont_sleep ? "󰒳 " : "󰒲 "}
+      )
+    )
+
+    (button
+      :class "glass_block"
+      :onclick "$HOME/.config/eww/scripts/popup.ts open system"
+      :style "padding: 0px 1em;"
+      ; :space-evenly true  
+      :halign "end"
+      ; (mem)
+      ; (cpu)
+      (bat)
+    )
+
+
+    (button
+      :class "glass_block"
+      :onclick "swaync-client -rs && swaync-client -R && swaync-client -op"
+      (box
+        :vexpand "false"
+        :hexpand "false"
+        :space-evenly "false"
+        (label
+          :class "module-notification"
+          :style "color: ${NOTIFICATION_ICON_COLOR};" 
+          :text NOTIFICATION_ICON )
+      )
+    )
+
+
+    (button
+      :class "glass_block"
+      :onclick "$HOME/.config/eww/scripts/popup.ts open calendar"
+      (box
+        :class "module clock_module"
+        :space-evenly "false"
+        :orientation "h"
+        :tooltip {formattime(EWW_TIME, "%d %b, %Y")}
+        ; :spacing "3"
+        (label
+          :class "clock_date"
+          :text {formattime(EWW_TIME, "%d-%m")}
+        )
+        (label
+          :text {formattime(EWW_TIME, "%a")}
+          :class "weekday"
+        )
+        (label
+          :text {formattime(EWW_TIME, "\%H")}
+          :class "clock_hour_class"
+        )
+        (scale
+          :class "time-progress"
+          :value {formattime(EWW_TIME, "%S")}
+          :max 60
+          :round-digits 0
+          :orientation "v"
+          :flipped true
+        )
+        ; (label :text "" :class "clock_time_sep" )
+        (label
+          :text {formattime(EWW_TIME, "\%M")}
+          :class "clock_minute_class"
+        )
+      )
+      ; (clock_module)
+    )
+  )
+)

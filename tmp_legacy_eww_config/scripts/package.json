@@ -1,0 +1,6 @@
+{
+  "dependencies": {
+    "@thames/monads": "^0.6.2",
+    "rusty-enums": "^1.0.8"
+  }
+}

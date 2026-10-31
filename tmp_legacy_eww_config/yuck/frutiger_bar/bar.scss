@@ -1,0 +1,437 @@
+@import './workspace_dot.scss';
+@import './sleep_blocker_button.scss';
+.frutiger_bar {
+  font-family: FiraCode Nerd Font, DaddyTimeMono NF, Source Han Sans JP;
+
+  font-size: 11px;
+  font-weight: 200;
+  // background-color: rgba(180, 180, 180, 0.1);
+  // border-bottom: 1px solid rgba(200, 255, 255, 0.3);
+  // border-bottom: 1px solid rgba(30, 30, 30, 0.2);
+  // box-shadow: 1px 1px 1px 1px #111111;
+
+  background-image: linear-gradient(
+    to bottom,
+    rgba(80, 80, 80, 0) 0%,
+    // rgba(80, 80, 80, 0) 50%,
+    rgba(80, 80, 80, 0.1) 80%,
+    rgba(200, 255, 255, 0.1) 90%,
+    rgba(80, 80, 80, 0.3) 100%
+  );
+
+  .glass_block {
+    border: 0.8px solid rgba(200, 255, 255, 0.6);
+    // border: 0.8px solid adjust-hue(rgba(200, 255, 255, 0.6), 120deg);
+    border-radius: 0.5em;
+    box-shadow: 0px 0px 2px 2px rgba(30, 30, 30, 0.6);
+    margin: 0px 0.5em;
+
+    // box-shadow: 0px -1px 1px 1.5px rgba(30, 30, 30, 0.6), 0px 0.7px 1.5px 0.5px rgba(240, 240, 240, 0.6);
+
+    // ## Straight-line reflection
+    // background-image: linear-gradient(
+    //   to bottom,
+    //   rgba(255, 255, 255, 0.3) 0%,
+    //   rgba(255, 255, 255, 0.2) 49%,
+    //   rgba(255, 255, 255, 0) 50%,
+    //   rgba(0, 0, 0, 0) 100%
+    // ), linear-gradient(
+    //   to right,
+    //   rgba(0, 0, 0, 0.2) 0%,
+    //   rgba(255, 255, 255, 0) 10px,
+    //   rgba(255, 255, 255, 0) 10px,
+    //   rgba(0, 0, 0, 0.2) 100%
+    // );
+    background-image: radial-gradient(
+      ellipse 70% 40% at 50% 20%,
+      rgba(255, 255, 255, 0.35) 0%,
+      rgba(255, 255, 255, 0.3) 39%,
+      rgba(255, 255, 255, 0) 40%,
+      rgba(0, 28, 66, 0) 100%
+    ), linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0.4) 0%,
+      rgba(0, 0, 0, 0) 15%,
+      rgba(0, 0, 0, 0) 85%,
+      rgba(0, 0, 0, 0.4) 100%
+    );
+    transition: background-image 0.5s;
+
+    &:hover {
+      box-shadow: 0px 0.7px 2px 1.5px rgba(100, 234, 255, 0.9);
+
+
+      // straight-line reflection ver.
+      // background-image: linear-gradient(
+      //   to bottom,
+      //   rgba(255, 255, 255, 0.5) 0%,
+      //   rgba(255, 255, 255, 0.3) 49%,
+      //   rgba(255, 255, 255, 0) 50%,
+      //   rgba(0, 0, 0, 0) 100%
+      // ), linear-gradient(
+      //   to right,
+      //   rgba(0, 0, 0, 0.2) 0%,
+      //   rgba(255, 255, 255, 0) 10px,
+      //   rgba(255, 255, 255, 0) 10px,
+      //   rgba(0, 0, 0, 0.2) 100%
+      // ), radial-gradient(
+      //   ellipse at 50% 85%,
+      //   rgba(0, 234, 255, 1) 0%,
+      //   rgba(29, 129, 140, 0.7) 50%,
+      //   rgba(0, 28, 66, 0.7) 100%
+      // );
+
+      background-image: radial-gradient(
+        ellipse 70% 40% at 50% 20%,
+        rgba(255, 255, 255, 0.5) 0%,
+        rgba(255, 255, 255, 0.3) 39%,
+        rgba(255, 255, 255, 0) 40%,
+        rgba(0, 28, 66, 0) 100%
+      ), linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0.2) 0%,
+        rgba(255, 255, 255, 0) 10px,
+        rgba(255, 255, 255, 0) 10px,
+        rgba(0, 0, 0, 0.2) 100%
+      ), radial-gradient(
+        ellipse at 50% 85%,
+        rgba(0, 234, 255, 1) 0%,
+        rgba(29, 129, 140, 0.7) 50%,
+        rgba(0, 28, 66, 0.7) 100%
+      );
+      transition: background-image 0.5s, box-shadow 0.5s;
+
+      &:active {
+
+        // straight-line reflection ver.
+        // background-image: linear-gradient(
+        //   to bottom,
+        //   rgba(255, 255, 255, 0.5) 0%,
+        //   rgba(255, 255, 255, 0.4) 49%,
+        //   rgba(255, 255, 255, 0) 50%,
+        //   rgba(0, 0, 0, 0) 100%
+        // ), linear-gradient(
+        //   to right,
+        //   rgba(0, 0, 0, 0.2) 0%,
+        //   rgba(255, 255, 255, 0) 10px,
+        //   rgba(255, 255, 255, 0) 10px,
+        //   rgba(0, 0, 0, 0.2) 100%
+        // ), radial-gradient(
+        //   ellipse at 50% 85%,
+        //   rgba(0, 234, 255, 1) 0%,
+        //   rgba(0, 49, 54, 0.8) 50%,
+        //   rgba(0, 28, 66, 0.8) 100%
+        // );
+        background-image: radial-gradient(
+          ellipse 70% 40% at 50% 20%,
+          rgba(255, 255, 255, 0.5) 0%,
+          rgba(255, 255, 255, 0.4) 39%,
+          rgba(255, 255, 255, 0) 40%,
+          rgba(0, 28, 66, 0) 100%
+        ), linear-gradient(
+          to right,
+          rgba(0, 0, 0, 0.2) 0%,
+          rgba(255, 255, 255, 0) 10px,
+          rgba(255, 255, 255, 0) 10px,
+          rgba(0, 0, 0, 0.2) 100%
+        ), radial-gradient(
+          ellipse at 50% 85%,
+          rgba(0, 234, 255, 1) 0%,
+          rgba(0, 49, 54, 0.8) 50%,
+          rgba(0, 28, 66, 0.8) 100%
+        );
+        transition: background-image 0s;
+      }
+    }
+
+  }
+
+  .sep {
+    margin: 0em 0.5em;
+  }
+
+  // :hover .clock_module{
+  //   color: black;
+  // }
+  .clock_module {
+    transition: color 0.5s;
+
+    padding: 0px 1em;
+    // margin-left: 1em;
+    color: #bfc9db;
+    font-weight: 400;
+    // margin-right: 0.5em;
+
+    // .clock_wday_year {
+    //   margin: 0px;
+    //   margin-right: 8px;
+    //   .year {
+    //     font-size: 0.7em;
+    //     margin-bottom: -2px;
+    //   }
+    // }
+
+    .clock_date {
+      font-size: 1.1em;
+      margin: 0px;
+      // margin-right: 0.4em;
+      // margin-top: 3px;
+    }
+
+    .weekday {
+      font-size: 1.2em;
+      // margin-bottom: -0.5em;
+      margin-right: 0.4em;
+      margin-left: 0.4em;
+    }
+
+    .clock_time_sep {
+      font-size: 1em;
+      margin: 0px 0px 0px 0px;
+    }
+
+    .time-progress {
+      margin-bottom: 0.2em;
+      margin-top: 0.1em;
+      margin-left: 0.15em;
+      margin-right: 0.15em;
+
+      trough {
+        all: unset;
+        min-width: 0.1em;
+        background-color: #444444;
+
+        highlight {
+          all: unset;
+          background-color: #bfc9db;
+          border-radius: 24px;
+        }
+      }
+    }
+
+    .clock_hour_class,
+    .clock_minute_class {
+      font-size: 1.3em;
+    }
+
+
+    .clock_minute_class {
+      margin: 0px 0.1em 0px 0.2em;
+    }
+
+    .clock_hour_class {
+      // font-weight: bold;
+      margin: 0px 0.3em 0px 0.2em;
+    }
+  }
+
+  .cpubar {
+    color: #a1bdce;
+    background-color: #38384d;
+    border-radius: 10px;
+  }
+
+  .membar {
+    color: #e0b089;
+    background-color: #38384d;
+    border-radius: 10px;
+  }
+
+
+  .brightbar trough highlight {
+    background-image: linear-gradient(to right, #e4c9af 30%, #f2cdcd 50%, #e0b089 100% *50);
+    border-radius: 10px;
+  }
+
+  .volbar trough highlight {
+    background-image: linear-gradient(to right, #afcee0 30%, #a1bdce 50%, #77a5bf 100% *50);
+    border-radius: 10px;
+  }
+
+  .module_essid {
+    font-size: 1em;
+    // color: #a1bdce;
+    margin: 0px 10px 0px 0px;
+    font-weight: 400;
+  }
+
+  .icon {
+    font-size: 1.2em;
+    border-radius: 100%;
+    margin: 0px 0.5em 0px 0.5em;
+  }
+
+
+  .icon.wifi {
+    margin: 0px 0.4em 0px 0.5em;
+  }
+
+  .module-notification {
+    color: #a1bdce;
+
+    padding: 0 1em;
+    // margin: 0 1em;
+    font-size: 1.1em;
+
+  }
+
+  .bright_icon {
+    font-size: 1em;
+    color: #e4c9af;
+    margin: 0px 10px 0px 10px;
+  }
+
+  .systray {
+    // margin: 0.0em 1em;
+    // padding: 0px 0.5em;
+
+    // border: 0.8px solid rgba(200, 255, 255, 0.6);
+    border: 0.8px solid rgba(30, 30, 30, 0.6);
+    border-radius: 0.5em;
+    box-shadow: 0px 0px 1.7px 1px rgba(200, 255, 255, 0.4);
+    margin: 0px 0.5em;
+    background-image: linear-gradient(
+      to right,
+      rgba(30, 30, 30, 0.3) 0%,
+      rgba(30, 30, 30, 0) 10%,
+      rgba(30, 30, 30, 0) 90%,
+      rgba(30, 30, 30, 0.3) 100%
+    ), linear-gradient(
+      to bottom,
+      rgba(30, 30, 30, 0.4) 0%,
+      rgba(30, 30, 30, 0) 40%,
+      rgba(200, 255, 255, 0) 60%,
+      rgba(255, 255, 255, 0.3) 100%
+    );
+    // * {
+    //   border: 0.2px solid red;
+    // }
+    widget {
+
+      transition: background 0.6s;
+      &:hover {
+
+        background: radial-gradient(
+          ellipse 60% 80% at 50% 85%,
+          rgba(0, 234, 255, 1) 0%,
+          rgba(0, 49, 84, 0.6) 63%,
+          rgba(0, 49, 54, 0.0) 100%
+        );
+      }
+    }
+    image {
+      padding: 0px 0.8em;
+    }
+
+  }
+
+
+
+  .battery_box {
+    margin: 0px 5px;
+  }
+
+  .iconbat,
+  .iconmem,
+  .iconcpu {
+    font-size: 1em;
+  }
+
+  .bat_module {
+    // border-radius: 16px;
+    // margin: 2px 4px 2px 4px;
+    // color: #dae6cf;
+    font-size: 1em;
+    margin-left: -0.4em;
+
+    .iconbat {
+      font-size: 1.3em;
+    }
+  }
+
+
+
+  .cpu_module {
+    color: #a1bdce;
+    // margin: 2px 4px 2px 4px;
+    margin-right: 3px;
+
+    .iconcpu {
+      // margin-top: 4px;
+      margin-right: -10px;
+    }
+  }
+
+  .mem_module {
+    color: #e0b089;
+    margin-right: 5px;
+
+    // margin: 2px 4px 2px 4px;
+    .iconmem {
+      // margin-left: 6px;
+    }
+  }
+
+
+  .music_module {
+    // padding: 0px 5px 0px 5px;
+    font-family: FiraCode Nerd Font, Source Sans Variable, Source Han Sans JP, Cantarell;
+
+    // font-family: FiraCode Nerd Font, DaddyTimeMono NF, Source Han Sans JP;
+    color: #bfc9db;
+    color: #e9f5ed;
+
+    // margin: 0.1em 0px 0.1em 0px;
+    .cover_art {
+
+      background-size: cover;
+      background-position: center;
+      min-height: 0.5em;
+      min-width: 1.5em;
+      border-radius: 5px;
+      // border: 1px solid rgba(200, 255, 255, 0.6);
+      box-shadow: 0px 0px 1.5px 1px rgba(30, 30, 30, 0.6);
+      // .song_cover_art_glass {
+      //   background-image: radial-gradient(
+      //     ellipse 50% 40% at 50% 15%,
+      //     rgba(255, 255, 255, 0.8) 0%,
+      //     rgba(255, 255, 255, 0.3) 39%,
+      //     rgba(255, 255, 255, 0) 40%,
+      //     rgba(0, 28, 66, 0) 100%
+      //   ), radial-gradient(
+      //     ellipse 50% 50% at 50% 50%,
+      //     rgba(30, 30, 30, 0) 0%,
+      //     rgba(30, 30, 30, 0) 70%,
+      //     rgba(30, 30, 30, 0.3) 85%,
+      //     rgba(30, 30, 30, 0.8) 100%
+      //   );
+      //   border-radius: 100px;
+      //   //   0px -0.5px 1px 1.5px rgba(30, 30, 30, 0.6);
+      // }
+    }
+
+    .song {
+      // color: #a1bdce;
+      font-size: 1.1em;
+      font-weight: 400;
+      margin: -0.0em 0.5em;
+    }
+
+    .song_btn_play {
+      // color: #a1bdce;
+      // font-size: 1.2em;
+      padding: 0px 1.2em;
+
+    }
+
+
+    .song_btn_prev,
+    .song_btn_next {
+      // color: #bfc9db;
+      // font-size: 1em;
+      // margin: -3px 0.5em;
+
+    }
+
+  }
+}

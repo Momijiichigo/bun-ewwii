@@ -1,0 +1,20 @@
+(defwidget cpu []
+  (box 
+    :class "cpu_module"
+    :vexpand "false"
+    :hexpand "false"
+    :tooltip "using ${round(EWW_CPU.avg, 0)}% CPU"
+    (label 
+      :class "iconcpu"
+      :limit-width 2
+      :show-truncated false
+      :wrap false
+      :unindent true
+      :text " "
+    )
+    (label 
+      :class "cpu_perc"
+      :text "${round(EWW_CPU.avg, 0)}%"
+    )
+  )
+)

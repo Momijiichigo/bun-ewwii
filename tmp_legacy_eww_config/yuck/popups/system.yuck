@@ -1,0 +1,297 @@
+; system popup
+; cpu usage, memory usage, battery status
+(include "yuck/components/circ_progress.yuck")
+
+(defwidget sys_popup_separator []
+  (box
+    :class "sep"
+    :halign "center"
+    :hexpand true
+    :space-evenly false
+    :spacing 0
+    (box)
+  )
+)
+(defwidget system []
+  (eventbox
+    :onhoverlost "~/.config/eww/scripts/popup.ts close system"
+    (box
+      :class "popup sys_win"
+      :orientation "v"
+      :space-evenly "false"
+      :hexpand "false"
+      :vexpand "false" 
+      :spacing 0
+      (box 
+        :class "box"
+        :orientation "h"
+        :space-evenly "false"
+        :spacing 20
+        (circ-prog 
+          :value {round(EWW_BATTERY["BAT0"].capacity / 0.79, 0)}
+          :class "bat"
+          :thickness 2
+          (label
+            :unindent false
+            :text "${
+              EWW_BATTERY["BAT0"].status == "Charging"
+                ? battery_icons_charging?.[
+                  round(round(EWW_BATTERY["BAT0"].capacity / 0.79, 0) / 10, 0)
+                ] ?: battery_icons_charging[10]
+                : battery_icons?.[
+                  round(round(EWW_BATTERY["BAT0"].capacity / 0.79, 0) / 10, 0)
+                ] ?: battery_icons[10]
+            } "
+            :class "icon icon_bat"
+            :limit-width 2
+            :show-truncated false
+            :wrap false)
+        )
+        (box
+          :orientation "v"
+          :space-evenly "false"
+          :spacing 3
+          :hexpand "false"
+          :vexpand "false"
+          (label
+            :text "battery"
+            :halign "start"
+            :class "title"
+            :limit-width 9
+            :show-truncated false
+            :wrap false)
+          (label
+            :text "${round(EWW_BATTERY["BAT0"].capacity / 0.79, 0)}%"
+            :halign "start"
+            :class "text_bat_sub"
+            :limit-width 22
+            :show-truncated false
+            :wrap false)
+          (label
+            :text "${EWW_BATTERY["BAT0"].status}"
+            :halign "start"
+            :class "text_bat_sub"
+            :limit-width 22
+            :show-truncated false
+            :wrap false)
+          ; (box
+          ;   :orientation "h"
+          ;   :space-evenly "false"
+          ;   :spacing 10
+          ;   (label
+          ;     :text "power mode"
+          ;     :halign "start"
+          ;     :class "text_bat_sub"
+          ;     :limit-width 22
+          ;     :show-truncated false
+          ;     :wrap false)
+          ;   (scale
+          ;     :class "power_mode"
+          ;     ; power modes
+          ;     :marks "[a, b, c]"
+          ;     :min 0
+          ;     :max 3
+          ;     :value power_mode
+          ;     :onchange "~/.config/hypr/scripts/power_battery.ts set_mode {}"
+          ;     ; :draw-value true
+          ;   )
+          ; )
+          ; (scale
+          ;   :class "power_mode"
+          ;   ; power modes
+          ;   marks: [
+          ;     {value: 0, label: ""},
+          ;     {value: 1, label: ""},
+          ;     {value: 2, label: ""},
+          ;     {value: 3, label: ""},
+          ;   ]
+          ;   :min 0
+          ;   :max 3
+          ;   :value 3
+          ;   :draw-value true
+          ; )
+        )
+      )
+      ;; (sys_popup_separator )
+      (box 
+        :class "box"
+        :orientation "h"
+        :space-evenly "false"
+        :halign "start"
+        :spacing 20
+        (circ-prog
+          :value {EWW_RAM.used_mem_perc}
+          :class "mem"
+          :thickness 2
+          (label
+            :text " "
+            :class "icon icon_mem"
+            :limit-width 2
+            :show-truncated false
+            :wrap false
+            ;:angle 90
+          )
+        )
+        (box
+          :orientation "v"
+          :space-evenly "false"
+          :spacing 5
+          ;:hexpand "false"
+          ;:vexpand "false"
+          (label
+            :text "memory"
+            :halign "start"
+            :class "title"
+            :limit-width 9
+            :show-truncated false
+            :wrap false)
+          (label
+            :text "${round(EWW_RAM.used_mem / 1000000000, 2)} | ${round(EWW_RAM.total_mem / 1000000000, 1)} Mem"
+            :halign "start"
+            :class "text_mem_sub"
+            :limit-width 22
+            :show-truncated false
+            :wrap false)
+          (label
+            :text "${round((EWW_RAM.total_swap - EWW_RAM.free_swap) / 1000000000, 2)} | ${round(EWW_RAM.total_swap / 1000000000, 1)} Swap"
+            :halign "start"
+            :class "text_mem_sub"
+            :limit-width 22
+            :show-truncated false
+            :wrap false)
+        )
+      )
+      ;; (sys_popup_separator )
+      (box
+        :class "box"
+        :orientation "h"
+        :space-evenly "false"
+        :spacing 20
+        (circ-prog 
+          :value {EWW_CPU.avg}
+          :class "cpu"
+          :thickness 2
+          (label
+            :text " "
+            :class "icon icon_cpu"
+            :limit-width 2
+            :show-truncated false
+            :wrap false)
+        )
+        (box
+          :orientation "v"
+          :space-evenly "false"
+          :spacing 10
+          :hexpand "false"
+          :vexpand "false"
+          (label :text "CPU"
+            :halign "start"
+            :class "title"
+            :limit-width 9
+            :show-truncated false
+            :wrap false)
+          (label
+            :text "${round(EWW_CPU.avg, 1)}%"
+            :halign "start"
+            :class "text_bat_sub"
+            :limit-width 22
+            :show-truncated false
+            :wrap false)
+        )
+      )
+      ;; (sys_popup_separator )
+      (box
+        :class "box"
+        :orientation "h"
+        :space-evenly "false"
+        :spacing 20
+        (box
+          :style {
+            "border-radius: 50%; border: 1.5px solid ${
+                card_power_state_icon_info[
+                  gpu_card_power_state
+                ]?.[0] ?: "gray"
+            };"
+          }
+          (label
+            :text { 
+              card_power_state_icon_info[
+                gpu_card_power_state
+              ]?.[1] ?: "gray"
+            }
+            ; :class "icon icon_cpu"
+            :style { 
+              "color: ${
+                card_power_state_icon_info[
+                  gpu_card_power_state
+                ]?.[0] ?: "gray"
+              }; font-size: 2em;"
+            }
+            :width 75
+            :height 75
+            ; :limit-width 2
+            :show-truncated false
+            :wrap false)
+        )
+        
+        (box
+          :orientation "v"
+          :space-evenly "false"
+          :spacing 10
+          :hexpand "false"
+          :vexpand "false"
+          (label :text "GPU Card"
+            :halign "start"
+            :class "title"
+            :limit-width 9
+            :show-truncated false
+            :wrap false)
+          (label
+            :text gpu_card_power_state
+            :halign "start"
+            :class "text_bat_sub"
+            :limit-width 22
+            :show-truncated false
+            :wrap false)
+        )
+      )
+      ; (box 
+      ;   :class "box"
+      ;   :orientation "h"
+      ;   :space-evenly "false"
+      ;   :spacing 20
+      ;   (label
+      ;     ; :class "title"
+      ;     :text "Nvidia Card\\nPower State")
+      ;   (label
+      ;     ; :class "title"
+      ;     :text NVIDIA_CARD_POWER_STATE)
+      ; )
+      (box 
+        :class "box"
+        :orientation "h"
+        :space-evenly "false"
+        :spacing 20
+        (box
+          :orientation "v"
+
+          (label
+            :class "title"
+            :text "Storage")
+
+          (label
+            ; :class "title"
+            :text "${round(EWW_DISK["/"].used_perc, 1)}%")
+        )
+        (scale
+          :class "storage"
+          :value {EWW_DISK["/"].used_perc}
+          :min 0
+          :max 100
+          :active true
+          :orientation "h"
+        )
+      )
+    )
+  )
+)

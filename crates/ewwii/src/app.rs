@@ -1,0 +1,1320 @@
+use crate::updates::api::VarWatcherAPI;
+use crate::{
+    config::ewwii_config::EWWII_CONFIG_PARSER,
+    daemon_response::DaemonResponseSender,
+    display_backend::DisplayBackend,
+    error_handling_ctx,
+    gtk4::prelude::{
+        Cast, CastNone, DisplayExt, GtkWindowExt, ListModelExt, MonitorExt, NativeExt, ObjectExt,
+        SurfaceExt, WidgetExt,
+    },
+    opts::{WidgetAction, WidgetControlCommand},
+    paths::EwwiiPaths,
+    widgets::{
+        build_widget::build_gtk_widget, build_widget::WidgetInput,
+        widget_definitions::WidgetRegistry,
+    },
+    window::{
+        coords::Coords,
+        monitor::MonitorIdentifier,
+        window_geometry::{AnchorPoint, WindowGeometry},
+    },
+    window_arguments::WindowArguments,
+    window_initiator::WindowInitiator,
+    *,
+};
+use anyhow::anyhow;
+use ewwii_bunjs::WindowInstanceInfo;
+use ewwii_plugin_api as epapi;
+use ewwii_shared_utils::ast::WidgetNode;
+use futures::future::FutureExt;
+use gdk::Monitor;
+use gtk4::Window;
+use gtk4::{gdk, glib};
+use itertools::Itertools;
+use std::{
+    cell::Cell,
+    collections::{HashMap, HashSet},
+    marker::PhantomData,
+    path::PathBuf,
+    rc::Rc,
+    sync::Mutex,
+};
+use tokio::sync::mpsc::UnboundedSender;
+
+fn register_active_plugin(lib: libloading::Library, id: String, version: String) -> Result<()> {
+    let mut plugins = plugin::ACTIVE_PLUGINS
+        .write()
+        .map_err(|_| anyhow!("Plugin registry is poisoned!"))?;
+
+    if plugins.iter().any(|p| p.id == id) {
+        return Err(anyhow!("Plugin with ID {} is already loaded", id));
+    }
+
+    plugins.push(plugin::ActivePlugin {
+        library: lib,
+        id,
+        version,
+    });
+
+    Ok(())
+}
+
+/// A command for the ewwii daemon.
+/// While these are mostly generated from ewwii CLI commands (see [`opts::ActionWithServer`]),
+/// they may also be generated from other places internally.
+#[derive(Debug)]
+pub enum DaemonCommand {
+    NoOp,
+    ReloadConfigAndCss(DaemonResponseSender),
+    HotReloadConfig(DaemonResponseSender),
+    PathInfo(DaemonResponseSender),
+    OpenInspector,
+    // OpenMany {
+    //     windows: Vec<(String, String)>,
+    //     // args: Vec<(String, VarName, DynVal)>,
+    //     should_toggle: bool,
+    //     sender: DaemonResponseSender,
+    // },
+    OpenWindow {
+        window_name: String,
+        instance_id: Option<String>,
+        pos: Option<Coords>,
+        size: Option<Coords>,
+        anchor: Option<AnchorPoint>,
+        screen: Option<MonitorIdentifier>,
+        should_toggle: bool,
+        duration: Option<std::time::Duration>,
+        sender: DaemonResponseSender,
+        // args: Option<Vec<(VarName, DynVal)>>,
+    },
+    OpenMany {
+        windows: Vec<(String, String)>,
+        should_toggle: bool,
+        args: Vec<(String, String, String)>,
+        sender: DaemonResponseSender,
+    },
+    CloseWindows {
+        windows: Vec<String>,
+        auto_reopen: bool,
+        sender: DaemonResponseSender,
+    },
+    KillServer,
+    CloseAll,
+    PrintDebug(DaemonResponseSender),
+    ShowState(DaemonResponseSender),
+    ListWindows(DaemonResponseSender),
+    ListActiveWindows(DaemonResponseSender),
+    ListPlugins(DaemonResponseSender),
+    WidgetControl {
+        command: WidgetControlCommand,
+        no_wait: bool,
+        sender: DaemonResponseSender,
+    },
+    Update {
+        mappings: HashMap<String, String>,
+        sender: DaemonResponseSender,
+    },
+}
+
+/// An opened window.
+pub struct EwwiiWindow {
+    pub name: String,
+    pub gtk_window: Window,
+    pub waited_close: Option<Duration>,
+    pub delete_event_handler_id: Option<glib::SignalHandlerId>,
+    pub destroy_event_handler_id: Option<glib::SignalHandlerId>,
+}
+
+impl std::fmt::Debug for EwwiiWindow {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("EwwiiWindow")
+            .field("name", &self.name)
+            .field("gtk_window", &"<GtkWindow>")
+            .field("waited_close", &self.waited_close)
+            .field("widget_reg_store", &"<WidgetRegistry>")
+            .field("delete_event_handler_id", &self.delete_event_handler_id)
+            .field("destroy_event_handler_id", &self.destroy_event_handler_id)
+            .finish()
+    }
+}
+
+impl EwwiiWindow {
+    /// Close the GTK window and disconnect the destroy event-handler.
+    ///
+    /// You need to make sure that the window gets propery cleaned from gtk4!
+    pub fn close(self) {
+        log::info!("Closing gtk window {}", self.name);
+
+        for handler_id in [self.destroy_event_handler_id, self.delete_event_handler_id]
+            .into_iter()
+            .flatten()
+        {
+            self.gtk_window.disconnect(handler_id);
+        }
+
+        self.gtk_window.close();
+    }
+}
+
+pub struct App<B: DisplayBackend> {
+    pub ewwii_config: config::EwwiiConfig,
+    /// Map of all currently open windows to their unique IDs
+    /// If no specific ID was specified whilst starting the window,
+    /// it will be the same as the window name.
+    /// Therefore, only one window of a given name can exist when not using IDs.
+    pub open_windows: HashMap<String, EwwiiWindow>,
+    pub instance_id_to_args: HashMap<String, WindowArguments>,
+    /// Window names that are supposed to be open, but failed.
+    /// When reloading the config, these should be opened again.
+    pub failed_windows: HashSet<String>,
+    /// The user's css provider.
+    pub css_provider: gtk4::CssProvider,
+    /// This will be set by the plugins.
+    pub custom_css_providers: Vec<Option<gtk4::CssProvider>>,
+    pub gdk_display: Option<gtk4::gdk::Display>,
+    pub plugin_buffer: plugin::PluginBuffer,
+    pub reloading: bool,
+
+    /// Sender to send [`DaemonCommand`]s
+    pub app_evt_send: UnboundedSender<DaemonCommand>,
+
+    /// Senders that will cancel a windows auto-close timer when started with --duration.
+    pub window_close_timer_abort_senders: HashMap<String, futures::channel::oneshot::Sender<()>>,
+
+    /// Per-window-instance GTK widget registries.
+    pub widget_reg_store: Rc<Mutex<HashMap<String, WidgetRegistry>>>,
+    /// Per-instance structural overrides. When absent, the instance is built
+    /// from the window definition's default tree.
+    pub instance_trees: HashMap<String, WidgetNode>,
+
+    pub paths: EwwiiPaths,
+    pub gtk_main_loop: gtk4::glib::MainLoop,
+    pub phantom: PhantomData<B>,
+}
+
+impl<B: DisplayBackend> std::fmt::Debug for App<B> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("App")
+            .field("ewwii_config", &self.ewwii_config)
+            .field("open_windows", &self.open_windows)
+            .field("failed_windows", &self.failed_windows)
+            .field("window_arguments", &self.instance_id_to_args)
+            .field("paths", &self.paths)
+            .finish()
+    }
+}
+
+/// Wait until the .model() is available for all monitors (or there is a timeout)
+async fn wait_for_monitor_model() {
+    let display = gdk::Display::default().expect("could not get default display");
+    let start = std::time::Instant::now();
+    loop {
+        let monitors_model = display.monitors();
+        let n_monitors = monitors_model.n_items();
+
+        let all_monitors_set = (0..n_monitors).all(|i| {
+            if let Some(obj) = monitors_model.item(i) {
+                // Downcast GObject to Monitor
+                let monitor: Monitor = obj.downcast().unwrap();
+                monitor.model().is_some()
+            } else {
+                false
+            }
+        });
+        if all_monitors_set {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        if std::time::Instant::now() - start > Duration::from_millis(500) {
+            log::warn!("Timed out waiting for monitor model to be set");
+            break;
+        }
+    }
+}
+
+impl<B: DisplayBackend> App<B> {
+    /// Handle a [`DaemonCommand`] event, logging any errors that occur.
+    pub async fn handle_command(&mut self, event: DaemonCommand) {
+        if let Err(err) = self.try_handle_command(event).await {
+            error_handling_ctx::print_error(err);
+        }
+    }
+
+    async fn handle_reload_req(
+        &mut self,
+        sender: DaemonResponseSender,
+        _hotreload: bool,
+    ) -> Result<()> {
+        // Wait for all monitor models to be set. When a new monitor gets added, this
+        // might not immediately be the case. And if we were to wait inside the
+        // connect_monitor_added callback, model() never gets set. So instead we wait here.
+        wait_for_monitor_model().await;
+        let mut errors = Vec::new();
+
+        let config_result = config::read_from_ewwii_paths(&self.paths);
+
+        match config_result {
+            Ok(new_config) => {
+                if let Err(e) = self.load_config(new_config) {
+                    errors.push(e);
+                }
+            }
+            Err(e) => errors.push(e),
+        }
+
+        match crate::config::scss::parse_scss_from_config(self.paths.get_config_dir()) {
+            Ok((file_id, css)) => {
+                if let Err(e) = self.load_css(file_id, &css) {
+                    errors.push(anyhow!(e));
+                }
+            }
+            Err(e) => {
+                errors.push(e);
+            }
+        }
+
+        sender.respond_with_error_list(errors)?;
+
+        Ok(())
+    }
+
+    /// Try to handle a [`DaemonCommand`] event.
+    async fn try_handle_command(&mut self, event: DaemonCommand) -> Result<()> {
+        log::debug!("Handling event: {:?}", event);
+        match event {
+            DaemonCommand::NoOp => {}
+            DaemonCommand::OpenInspector => {
+                gtk4::Window::set_interactive_debugging(true);
+            }
+            DaemonCommand::ReloadConfigAndCss(sender) => {
+                self.handle_reload_req(sender, false).await?
+            }
+            DaemonCommand::HotReloadConfig(sender) => self.handle_reload_req(sender, true).await?,
+            DaemonCommand::PathInfo(sender) => {
+                let json = serde_json::to_string(&self.paths)?;
+                sender.send_success(json)?;
+            }
+            DaemonCommand::KillServer => {
+                log::info!("Received kill command, stopping server!");
+                self.stop_application();
+            }
+            DaemonCommand::CloseAll => {
+                log::info!("Received close command, closing all windows");
+                for window_name in self.open_windows.keys().cloned().collect::<Vec<String>>() {
+                    self.close_window(&window_name, false)?;
+                }
+            }
+            DaemonCommand::OpenWindow {
+                window_name,
+                instance_id,
+                pos,
+                size,
+                anchor,
+                screen: monitor,
+                should_toggle,
+                duration,
+                sender,
+                // args,
+            } => {
+                let instance_id = instance_id.unwrap_or_else(|| window_name.clone());
+
+                let is_open = self.open_windows.contains_key(&instance_id);
+
+                let result = if should_toggle && is_open {
+                    self.close_window(&instance_id, false)
+                } else {
+                    self.open_window(&WindowArguments {
+                        instance_id,
+                        window_name,
+                        pos,
+                        size,
+                        monitor,
+                        anchor,
+                        duration,
+                    })
+                };
+
+                sender.respond_with_result(result)?;
+            }
+            DaemonCommand::OpenMany {
+                windows,
+                args,
+                should_toggle,
+                sender,
+            } => {
+                let errors = windows
+                    .iter()
+                    .map(|w| {
+                        let (config_name, id) = w;
+                        if should_toggle && self.open_windows.contains_key(id) {
+                            self.close_window(id, false)
+                        } else {
+                            let window_args = args
+                                .iter()
+                                .filter(|(win_id, ..)| win_id.is_empty() || win_id == id)
+                                .map(|(_, n, v)| (n.clone(), v.clone()))
+                                .collect();
+
+                            self.open_window(&WindowArguments::new_from_args(
+                                id.to_string(),
+                                config_name.clone(),
+                                window_args,
+                            )?)
+                        }
+                    })
+                    .filter_map(Result::err);
+                sender.respond_with_error_list(errors)?;
+            }
+            DaemonCommand::CloseWindows {
+                windows,
+                auto_reopen,
+                sender,
+            } => {
+                let errors = windows
+                    .iter()
+                    .map(|window| self.close_window(window, auto_reopen))
+                    .filter_map(Result::err);
+                // Ignore sending errors, as the channel might already be closed
+                let _ = sender.respond_with_error_list(errors);
+            }
+            DaemonCommand::ListWindows(sender) => {
+                let output = self.ewwii_config.get_windows().keys().join("\n");
+                sender.send_success(output)?
+            }
+            DaemonCommand::ListActiveWindows(sender) => {
+                let output = self
+                    .open_windows
+                    .iter()
+                    .map(|(id, window)| format!("{id}: {}", window.name))
+                    .join("\n");
+                sender.send_success(output)?
+            }
+            DaemonCommand::ListPlugins(sender) => {
+                let plugins_guard = match plugin::ACTIVE_PLUGINS.read() {
+                    Ok(guard) => guard,
+                    Err(_) => {
+                        sender.send_failure("Failed to acquire plugin lock".to_string())?;
+                        return Ok(());
+                    }
+                };
+
+                let output: String = plugins_guard
+                    .iter()
+                    .map(|p| format!("{} (v{})", p.id, p.version))
+                    .join("\n");
+
+                sender.send_success(output)?
+            }
+            DaemonCommand::PrintDebug(sender) => {
+                let output = format!("{:#?}", self);
+                sender.send_success(output)?
+            }
+            DaemonCommand::ShowState(sender) => {
+                let output = format!("{:#?}", crate::updates::api::VarWatcherAPI::state());
+                sender.send_success(output)?
+            }
+            DaemonCommand::Update { mappings, sender } => {
+                match self.update_variables(mappings) {
+                    Ok(_) => sender.send_success(String::new())?,
+                    Err(e) => sender.send_failure(e.to_string())?,
+                };
+            }
+            DaemonCommand::WidgetControl {
+                command,
+                no_wait,
+                sender,
+            } => {
+                if no_wait {
+                    let _ = self.perform_widget_control(command);
+                    return Ok(());
+                }
+
+                match self.perform_widget_control(command) {
+                    Ok(s) => sender.send_success(s)?,
+                    Err(e) => sender.send_failure(e.to_string())?,
+                };
+            }
+        }
+        Ok(())
+    }
+
+    /// Fully stop ewwii:
+    /// close all windows, kill the poll/listen state handler, quit the gtk appliaction and send the exit instruction to the lifecycle manager
+    fn stop_application(&mut self) {
+        crate::updates::kill_state_change_handler();
+        for (_, window) in self.open_windows.drain() {
+            window.close();
+        }
+        self.gtk_main_loop.quit();
+        let _ = crate::application_lifecycle::send_exit();
+    }
+
+    /// Close a window
+    fn close_window(&mut self, instance_id: &str, auto_reopen: bool) -> Result<()> {
+        if let Some(old_abort_send) = self.window_close_timer_abort_senders.remove(instance_id) {
+            _ = old_abort_send.send(());
+        }
+        let ewwii_window = self.open_windows.remove(instance_id).with_context(|| {
+            format!("Tried to close window with id '{instance_id}', but no such window was open")
+        })?;
+
+        if let Ok(mut store) = self.widget_reg_store.lock() {
+            store.remove(instance_id);
+        }
+
+        if let Some(wc) = ewwii_window.waited_close {
+            log::info!("Waiting {:?} before closing window.", wc);
+
+            let (abort_tx, mut abort_rx) = futures::channel::oneshot::channel::<()>();
+            self.window_close_timer_abort_senders
+                .insert(instance_id.to_string(), abort_tx);
+
+            glib::MainContext::default().spawn_local(async move {
+                futures::select! {
+                    _ = glib::timeout_future(wc).fuse() => {
+                        log::info!("GLib timeout expired. Closing window.");
+                        ewwii_window.close();
+                    }
+                    _ = &mut abort_rx => {
+                        log::info!("Close window timer aborted via channel.");
+                    }
+                }
+            });
+        } else {
+            ewwii_window.close();
+        }
+
+        if auto_reopen {
+            self.failed_windows.insert(instance_id.to_string());
+            // There might be an alternative monitor available already, so try to re-open it immediately.
+            // This can happen for example when a monitor gets disconnected and another connected,
+            // and the connection event happens before the disconnect.
+            if let Some(window_arguments) = self.instance_id_to_args.get(instance_id) {
+                let _ = self.open_window(&window_arguments.clone());
+            }
+        } else {
+            // A real close invalidates the JS-side instance tree. Auto-reopen
+            // (e.g. monitor change) keeps it so structural overrides survive.
+            crate::config::notify_window_close(instance_id);
+            self.instance_id_to_args.remove(instance_id);
+            self.instance_trees.remove(instance_id);
+        }
+
+        // stop poll/listen handlers if no windows are open
+        if !self.reloading && self.open_windows.is_empty() {
+            log::trace!("Killing ewwii state change handler.");
+            crate::updates::kill_state_change_handler();
+            VarWatcherAPI::clear_all();
+        }
+
+        Ok(())
+    }
+
+    fn open_window(&mut self, window_args: &WindowArguments) -> Result<()> {
+        let instance_id = &window_args.instance_id;
+        self.failed_windows.remove(instance_id);
+        log::info!(
+            "Opening window {} as '{}'",
+            window_args.window_name,
+            instance_id
+        );
+
+        // if an instance of this is already running, close it
+        if self.open_windows.contains_key(instance_id) {
+            self.close_window(instance_id, false)?;
+        }
+
+        self.instance_id_to_args
+            .insert(instance_id.to_string(), window_args.clone());
+
+        let open_result: Result<_> = (|| {
+            let window_name: &str = &window_args.window_name;
+
+            let window_def = self.ewwii_config.get_window(window_name)?.clone();
+            assert_eq!(
+                window_def.name, window_name,
+                "window definition name did not equal the called window"
+            );
+
+            // setup initiator
+            let initiator = WindowInitiator::new(&window_def, window_args)?;
+
+            if !self.reloading && self.open_windows.is_empty() {
+                self.restart_signals()?;
+            }
+
+            // load widgets into an instance-local registry
+            let mut registry = WidgetRegistry::new();
+            let root_widget = if let Some(tree) = self.instance_trees.get(instance_id) {
+                build_gtk_widget(&WidgetInput::BorrowedNode(tree), &mut registry)?
+            } else {
+                build_gtk_widget(&WidgetInput::Window(window_def), &mut registry)?
+            };
+            self.widget_reg_store
+                .lock()
+                .map_err(|_| anyhow::anyhow!("Failed to lock widget store"))?
+                .insert(instance_id.clone(), registry);
+
+            root_widget.add_css_class(window_name);
+            root_widget.add_css_class(instance_id);
+
+            let monitor = get_gdk_monitor(initiator.monitor.clone())?;
+            let mut ewwii_window = initialize_window::<B>(&initiator, monitor, root_widget)?;
+
+            let instance_info = WindowInstanceInfo {
+                instance_id: instance_id.clone(),
+                window_name: window_name.to_string(),
+                monitor: initiator.monitor.as_ref().map(ToString::to_string),
+                screen: match initiator.monitor.as_ref() {
+                    Some(MonitorIdentifier::Numeric(screen)) => Some(*screen),
+                    _ => None,
+                },
+            };
+            crate::config::notify_window_init(&instance_info);
+            self.plugin_buffer.emit(
+                "ewwii-init-window",
+                serde_json::to_string(&instance_info).unwrap_or_default(),
+            );
+
+            let gtk_close_handler = {
+                let app_evt_sender = self.app_evt_send.clone();
+                let instance_id = instance_id.to_string();
+                // we don't care about the actual error response from the daemon as this is mostly just a fallback.
+                // Generally, this should get disconnected before the gtk window gets destroyed.
+                // This callback is triggered in 2 cases:
+                // - When the monitor of this window gets disconnected
+                // - When the window is closed manually.
+                move |auto_reopen| {
+                    let (response_sender, _) = daemon_response::create_pair();
+                    let command = DaemonCommand::CloseWindows {
+                        windows: vec![instance_id.clone()],
+                        auto_reopen,
+                        sender: response_sender,
+                    };
+                    if let Err(err) = app_evt_sender.send(command) {
+                        log::error!("Error sending close window command: {}", err);
+                    }
+                }
+            };
+
+            let closed_by_user = Rc::new(Cell::new(false));
+
+            // handling users close request
+            ewwii_window.delete_event_handler_id =
+                Some(ewwii_window.gtk_window.connect_close_request({
+                    let handler = gtk_close_handler.clone();
+                    let closed_by_user = closed_by_user.clone();
+                    move |_| {
+                        handler(false); // -- false: don't reopen window to respect users intent
+                        closed_by_user.set(true);
+                        glib::Propagation::Proceed
+                    }
+                }));
+
+            // handling destory request
+            ewwii_window.destroy_event_handler_id =
+                Some(ewwii_window.gtk_window.connect_destroy({
+                    let handler = gtk_close_handler.clone();
+                    let closed_by_user = closed_by_user.clone();
+                    move |_| {
+                        if !closed_by_user.get() {
+                            handler(true);
+                        }
+                    }
+                }));
+
+            let duration = window_args.duration;
+            if let Some(duration) = duration {
+                let app_evt_sender = self.app_evt_send.clone();
+
+                let (abort_send, abort_recv) = futures::channel::oneshot::channel();
+
+                glib::MainContext::default().spawn_local({
+                    let instance_id = instance_id.to_string();
+                    async move {
+                        tokio::select! {
+                            _ = glib::timeout_future(duration) => {
+                                let (response_sender, mut response_recv) = daemon_response::create_pair();
+                                let command = DaemonCommand::CloseWindows { windows: vec![instance_id.clone()], auto_reopen: false, sender: response_sender };
+                                if let Err(err) = app_evt_sender.send(command) {
+                                    log::error!("Error sending close window command to daemon after gtk window destroy event: {}", err);
+                                }
+                                _ = response_recv.recv().await;
+                            }
+                            _ = abort_recv => {}
+                        }
+                    }
+                });
+
+                if let Some(old_abort_send) = self
+                    .window_close_timer_abort_senders
+                    .insert(instance_id.to_string(), abort_send)
+                {
+                    _ = old_abort_send.send(());
+                }
+            }
+
+            self.open_windows
+                .insert(instance_id.to_string(), ewwii_window);
+            Ok(())
+        })();
+
+        if let Err(err) = open_result {
+            self.failed_windows.insert(instance_id.to_string());
+            Err(err).with_context(|| format!("failed to open window `{}`", instance_id))
+        } else {
+            Ok(())
+        }
+    }
+
+    /// Load the given configuration, reloading all script-vars and attempting to reopen all windows that where opened.
+    pub fn load_config(&mut self, config: config::EwwiiConfig) -> Result<()> {
+        log::info!("Reloading windows");
+        log::trace!("loading config: {:#?}", config);
+
+        // clean widget store and per-instance structural overrides
+        if let Ok(mut wreg) = self.widget_reg_store.lock() {
+            wreg.clear();
+        }
+        self.instance_trees.clear();
+
+        // clear property handlers
+        crate::property_macro::close_all_property_tasks();
+
+        self.reloading = true;
+        let result = (|| -> Result<()> {
+            self.ewwii_config.replace_data(config);
+            self.restart_signals()?;
+
+            let open_window_ids: Vec<String> = self
+                .open_windows
+                .keys()
+                .cloned()
+                .chain(self.failed_windows.iter().cloned())
+                .dedup()
+                .collect();
+
+            for instance_id in &open_window_ids {
+                let window_arguments = self.instance_id_to_args.get(instance_id).with_context(|| {
+                    format!("Cannot reopen window, initial parameters were not saved correctly for {instance_id}")
+                })?;
+                self.open_window(&window_arguments.clone())?;
+            }
+
+            Ok(())
+        })();
+        self.reloading = false;
+
+        self.plugin_buffer.emit("ewwii-reloaded-windows", "true");
+
+        result
+    }
+
+    /// Load a given CSS string into the gtk css provider
+    pub fn load_css(&mut self, _file_id: usize, css: &str) -> Result<()> {
+        self.css_provider.load_from_string(css);
+
+        Ok(())
+    }
+
+    /// Perform widget control based on the action
+    /// Resolve which window instance owns a widget name.
+    fn resolve_widget_instance(&self, instance: Option<&str>, widget_name: &str) -> Result<String> {
+        let store = self
+            .widget_reg_store
+            .lock()
+            .map_err(|_| anyhow::anyhow!("Failed to lock widget store"))?;
+
+        if let Some(instance) = instance {
+            if store.contains_key(instance) {
+                return Ok(instance.to_string());
+            }
+            anyhow::bail!("Window instance '{}' is not open", instance);
+        }
+
+        let matches: Vec<String> = store
+            .iter()
+            .filter(|(_, registry)| registry.get_widget_id_by_name(widget_name).is_some())
+            .map(|(instance, _)| instance.clone())
+            .collect();
+
+        match matches.as_slice() {
+            [instance] => Ok(instance.clone()),
+            [] => anyhow::bail!("Widget '{}' not found in any open window", widget_name),
+            _ => anyhow::bail!(
+                "Widget '{}' exists in multiple window instances ({}); specify --instance",
+                widget_name,
+                matches.join(", ")
+            ),
+        }
+    }
+
+    /// Replace only one window instance's widget tree and rebuild that instance.
+    ///
+    /// This is used by the Bun runtime for instance-scoped structural operations.
+    pub fn replace_instance_tree(&mut self, instance_id: String, tree: WidgetNode) -> Result<()> {
+        if !self.instance_id_to_args.contains_key(&instance_id) {
+            anyhow::bail!("Window instance '{}' is not open", instance_id);
+        }
+
+        let root = match tree {
+            WidgetNode::DefWindow { node, .. } => *node,
+            WidgetNode::Tree(mut nodes) => nodes
+                .drain(..)
+                .next()
+                .ok_or_else(|| anyhow!("Empty instance widget tree"))?,
+            other => other,
+        };
+
+        self.instance_trees.insert(instance_id.clone(), root);
+        self.rebuild_instance(&instance_id)
+    }
+
+    fn rebuild_instance(&mut self, instance_id: &str) -> Result<()> {
+        let args = self
+            .instance_id_to_args
+            .get(instance_id)
+            .cloned()
+            .with_context(|| format!("No saved arguments for window instance '{instance_id}'"))?;
+
+        // Do not call close_window here: that would notify the Bun sidecar of a
+        // close and make it discard its per-instance tree. This is an internal
+        // rebuild of one instance.
+        self.window_close_timer_abort_senders.remove(instance_id);
+        if let Some(old_window) = self.open_windows.remove(instance_id) {
+            old_window.close();
+        }
+        if let Ok(mut store) = self.widget_reg_store.lock() {
+            store.remove(instance_id);
+        }
+
+        // Preserve the instance arguments across the internal close.
+        self.instance_id_to_args
+            .insert(instance_id.to_string(), args.clone());
+        self.open_window(&args)
+    }
+
+    /// Perform widget control based on the action
+    pub fn perform_widget_control(&mut self, command: WidgetControlCommand) -> Result<String> {
+        match command {
+            WidgetControlCommand::AddClass {
+                class,
+                widget_name,
+                instance,
+            } => {
+                let key = self.resolve_widget_instance(instance.as_deref(), &widget_name)?;
+                let mut store = self
+                    .widget_reg_store
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("Failed to lock widget store"))?;
+                let registry = store
+                    .get_mut(&key)
+                    .ok_or_else(|| anyhow::anyhow!("Window instance '{}' is not open", key))?;
+                registry.update_class_of_widget_by_name(&widget_name, &class, false);
+            }
+            WidgetControlCommand::RemoveClass {
+                class,
+                widget_name,
+                instance,
+            } => {
+                let key = self.resolve_widget_instance(instance.as_deref(), &widget_name)?;
+                let mut store = self
+                    .widget_reg_store
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("Failed to lock widget store"))?;
+                let registry = store
+                    .get_mut(&key)
+                    .ok_or_else(|| anyhow::anyhow!("Window instance '{}' is not open", key))?;
+                registry.update_class_of_widget_by_name(&widget_name, &class, true);
+            }
+            WidgetControlCommand::PropertyGet {
+                property,
+                widget_name,
+                instance,
+            } => {
+                let key = self.resolve_widget_instance(instance.as_deref(), &widget_name)?;
+                let store = self
+                    .widget_reg_store
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("Failed to lock widget store"))?;
+                let registry = store
+                    .get(&key)
+                    .ok_or_else(|| anyhow::anyhow!("Window instance '{}' is not open", key))?;
+
+                return registry
+                    .get_property_by_name(&widget_name, &property)
+                    .ok_or_else(|| {
+                        anyhow::anyhow!("Property '{}' not found on '{}'", property, widget_name)
+                    });
+            }
+            WidgetControlCommand::PropertyUpdate {
+                property_and_value,
+                widget_name,
+                instance,
+            } => {
+                let key = self.resolve_widget_instance(instance.as_deref(), &widget_name)?;
+                let mut store = self
+                    .widget_reg_store
+                    .lock()
+                    .map_err(|_| anyhow::anyhow!("Failed to lock widget store"))?;
+                let registry = store
+                    .get_mut(&key)
+                    .ok_or_else(|| anyhow::anyhow!("Window instance '{}' is not open", key))?;
+
+                for (property, value) in &property_and_value {
+                    if !registry
+                        .update_property_by_name(&widget_name, (property.clone(), value.clone()))
+                    {
+                        anyhow::bail!("Widget '{}' not found", widget_name);
+                    }
+                }
+            }
+            WidgetControlCommand::Action { action } => match action {
+                WidgetAction::Scroll {
+                    widget,
+                    value,
+                    instance,
+                } => {
+                    let key = self.resolve_widget_instance(instance.as_deref(), &widget)?;
+                    let mut store = self
+                        .widget_reg_store
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("Failed to lock widget store"))?;
+                    let registry = store
+                        .get_mut(&key)
+                        .ok_or_else(|| anyhow::anyhow!("Window instance '{}' is not open", key))?;
+                    if !registry.scroll_widget(&widget, value) {
+                        anyhow::bail!("'{}' widget not found or is not a ScrolledWindow", widget);
+                    }
+                }
+                WidgetAction::Focus { widget, instance } => {
+                    let key = self.resolve_widget_instance(instance.as_deref(), &widget)?;
+                    let mut store = self
+                        .widget_reg_store
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("Failed to lock widget store"))?;
+                    let registry = store
+                        .get_mut(&key)
+                        .ok_or_else(|| anyhow::anyhow!("Window instance '{}' is not open", key))?;
+                    if !registry.focus_widget(&widget) {
+                        anyhow::bail!("Widget '{}' not found", widget);
+                    }
+                }
+            },
+            WidgetControlCommand::Remove { names, instance } => {
+                for name in names {
+                    let key = self.resolve_widget_instance(instance.as_deref(), &name)?;
+                    let mut store = self
+                        .widget_reg_store
+                        .lock()
+                        .map_err(|_| anyhow::anyhow!("Failed to lock widget store"))?;
+                    if let Some(registry) = store.get_mut(&key) {
+                        registry.remove_widget_by_name(&name);
+                    }
+                }
+            }
+        }
+
+        Ok(String::new())
+    }
+
+    /// Update variables based on the mappings provided
+    pub fn update_variables(&mut self, mappings: HashMap<String, String>) -> Result<()> {
+        for (variable, value) in mappings {
+            VarWatcherAPI::update_with_broadcast(&variable, value);
+        }
+
+        Ok(())
+    }
+
+    pub fn restart_signals(&self) -> Result<()> {
+        // stop the globals
+        crate::updates::kill_state_change_handler();
+
+        // Start the global variables
+        let signals_vec =
+            crate::updates::retreive_signals(self.ewwii_config.get_root_node()?.as_ref());
+
+        EWWII_CONFIG_PARSER.with(|p| {
+            let parser_raw = p.borrow();
+            let parser = parser_raw.as_ref().unwrap();
+            crate::updates::handle_state_changes(parser, signals_vec);
+        });
+
+        self.plugin_buffer.emit("ewwii-started-signals", "true");
+
+        Ok(())
+    }
+
+    pub fn load_ewwii_plugins(&mut self, plugin_paths: Vec<PathBuf>) -> Result<()> {
+        // In case no plugins were passed
+        if plugin_paths.is_empty() {
+            return Ok(());
+        }
+
+        for plugin_path in plugin_paths {
+            // SAFETY: This is necessary to load plugins
+            unsafe {
+                let lib = match libloading::Library::new(&plugin_path) {
+                    Ok(l) => l,
+                    Err(e) => {
+                        log::error!("Failed to load plugin: {}", e);
+                        continue;
+                    }
+                };
+
+                let version_symbol: Result<
+                    libloading::Symbol<unsafe extern "C" fn() -> *const u8>,
+                    _,
+                > = lib.get(b"ewwii_api_version");
+
+                match version_symbol {
+                    Ok(get_version) => {
+                        let c_str =
+                            std::ffi::CStr::from_ptr(get_version() as *const std::os::raw::c_char);
+                        let plugin_api_ver = c_str.to_str().unwrap_or("0.0.0");
+
+                        if !plugin::is_compatible(plugin_api_ver, epapi::API_VERSION) {
+                            log::error!(
+                                "Plugin {:?} rejected: API mismatch (Plugin: {}, Host: {})",
+                                plugin_path,
+                                plugin_api_ver,
+                                epapi::API_VERSION
+                            );
+                            continue;
+                        }
+                    }
+                    Err(_) => {
+                        log::error!(
+                            "Plugin {:?} rejected: No API version symbol found",
+                            plugin_path
+                        );
+                        continue;
+                    }
+                }
+
+                // Create the plugin and receive metadata
+                let create_result: Result<
+                    libloading::Symbol<unsafe extern "C" fn() -> epapi::PluginInfo>,
+                    _,
+                > = lib.get(b"ewwii_plugin_create");
+
+                let create = match create_result {
+                    Ok(symbol) => symbol,
+                    Err(e) => {
+                        log::error!("Missing ewwii_plugin_create in {:?}: {}", plugin_path, e);
+                        continue;
+                    }
+                };
+
+                let info = create();
+
+                // crash if plugin id is empty
+                if info.id.is_empty() {
+                    log::error!("Plugin registration failed: Plugin ID cannot be empty");
+                    continue;
+                }
+
+                log::debug!("Loading plugin: {} v{}", info.id, info.version);
+
+                let file_stem = plugin_path.file_stem().unwrap().to_str().unwrap();
+                let unique_id = format!("{}::{}", file_stem, info.id);
+
+                // Keep the library alive and register it before initialization
+                register_active_plugin(lib, unique_id.clone(), info.version.to_string())?;
+
+                {
+                    let plugins = plugin::ACTIVE_PLUGINS.read().unwrap();
+                    let plugin_entry = plugins.iter().find(|p| p.id == unique_id).unwrap();
+
+                    // Initializing plugins with metadata
+                    let init: libloading::Symbol<unsafe extern "C" fn(*const u8, usize)> =
+                        plugin_entry.library.get(b"ewwii_plugin_init")?;
+
+                    // Pass the ID back to the plugin
+                    let id_bytes = unique_id.as_bytes();
+                    init(id_bytes.as_ptr(), id_bytes.len());
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+fn initialize_window<B: DisplayBackend>(
+    window_init: &WindowInitiator,
+    monitor: Monitor,
+    root_widget: gtk4::Widget,
+) -> Result<EwwiiWindow> {
+    let monitor_geometry = monitor.geometry();
+    let (actual_window_rect, x, y) = match window_init.geometry {
+        Some(geometry) => {
+            let rect = get_window_rectangle(geometry, monitor_geometry);
+            (Some(rect), rect.x(), rect.y())
+        }
+        _ => (None, 0, 0),
+    };
+    let window = B::initialize_window(window_init, monitor_geometry, x, y).with_context(|| {
+        format!(
+            "monitor {} is unavailable",
+            window_init.monitor.clone().unwrap()
+        )
+    })?;
+
+    window.set_title(Some(&format!("Ewwii - {}", window_init.name)));
+    // window.set_position(gtk4::WindowPosition::None);
+    // window.set_gravity(gdk::Gravity::Center);
+
+    if let Some(actual_window_rect) = actual_window_rect {
+        window.set_size_request(actual_window_rect.width(), actual_window_rect.height());
+        window.set_default_size(actual_window_rect.width(), actual_window_rect.height());
+    }
+    window.set_decorated(false);
+    // window.set_skip_taskbar_hint(true);
+    // window.set_skip_pager_hint(true);
+
+    // run on_screen_changed to set the visual correctly initially.
+    // on_screen_changed(&window, None);
+    // window.connect_screen_changed(on_screen_changed);
+
+    window.set_child(Some(&root_widget));
+
+    if window_init.pass_input {
+        window.connect_realize(|window| {
+            if let Some(surface) = window.surface() {
+                let empty = gtk4::cairo::Region::create();
+                surface.set_input_region(&empty);
+            }
+        });
+    }
+
+    gtk4::prelude::WidgetExt::realize(&window);
+
+    #[cfg(feature = "x11")]
+    if B::IS_X11 {
+        if let Some(geometry) = window_init.geometry {
+            let (conn, _) = x11rb::rust_connection::RustConnection::connect(None)?;
+            let x11_conn = Rc::new(conn);
+
+            let gdk_surface = window
+                .surface()
+                .context("Couldn't get gdk window from gtk window")?;
+
+            let win_xid = gdk_surface
+                .downcast_ref::<gdk4_x11::X11Surface>()
+                .context("Failed to get x11 window for gtk window")?
+                .xid() as u32;
+
+            use x11rb::protocol::xproto::*;
+            x11_conn
+                .clone()
+                .change_window_attributes(
+                    win_xid,
+                    &ChangeWindowAttributesAux::new().event_mask(EventMask::STRUCTURE_NOTIFY),
+                )
+                .unwrap();
+
+            let _ = apply_window_position(x11_conn.clone(), geometry, monitor_geometry, &window);
+            if window_init.backend_options.x11.window_type
+                != crate::window::backend_window_options::X11WindowType::Normal
+            {
+                let window_clone = window.clone();
+                let conn_clone = x11_conn.clone();
+
+                use x11rb::connection::Connection;
+
+                glib::MainContext::default().spawn_local(async move {
+                    loop {
+                        if let Ok(Some(x11rb::protocol::Event::ConfigureNotify(_ev))) =
+                            conn_clone.poll_for_event()
+                        {
+                            let _ = apply_window_position(
+                                conn_clone.clone(),
+                                geometry,
+                                monitor_geometry,
+                                &window_clone,
+                            );
+                        }
+                        glib::timeout_future(std::time::Duration::from_millis(10)).await;
+                    }
+                });
+            }
+        }
+        display_backend::set_xprops(&window, monitor, window_init)?;
+    }
+
+    window.present();
+
+    Ok(EwwiiWindow {
+        name: window_init.name.clone(),
+        gtk_window: window,
+        waited_close: window_init.waited_close,
+        delete_event_handler_id: None,
+        destroy_event_handler_id: None,
+    })
+}
+
+/// Apply the provided window-positioning rules to the window.
+#[cfg(feature = "x11")]
+fn apply_window_position(
+    conn: Rc<x11rb::rust_connection::RustConnection>,
+    mut window_geometry: WindowGeometry,
+    monitor_geometry: gdk::Rectangle,
+    window: &Window,
+) -> Result<()> {
+    use x11rb::connection::Connection;
+    use x11rb::protocol::xproto::{ConfigureWindowAux, ConnectionExt, Window as XWindow};
+
+    let gdk_surface = window
+        .surface()
+        .context("Failed to get gdk surface from gtk window")?;
+
+    if let Some(x11_surface) = gdk_surface.downcast_ref::<gdk4_x11::X11Surface>() {
+        window_geometry.size =
+            crate::window::window_geometry::Coords::from_pixels(window.default_size());
+        let actual_window_rect = get_window_rectangle(window_geometry, monitor_geometry);
+
+        let xid = x11_surface.xid();
+
+        let aux = ConfigureWindowAux::new()
+            .x(actual_window_rect.x())
+            .y(actual_window_rect.y());
+
+        conn.as_ref().configure_window(xid as XWindow, &aux)?;
+        conn.as_ref().flush()?;
+    }
+
+    Ok(())
+}
+
+// fn on_screen_changed(window: &Window, _old_screen: Option<&gdk::Screen>) {
+//     let visual = window.screen().and_then(|screen| {
+//         screen.rgba_visual().filter(|_| screen.is_composited()).or_else(|| screen.system_visual())
+//     });
+//     window.set_visual(visual.as_ref());
+// }
+
+/// Get the monitor geometry of a given monitor, or the default if none is given
+fn get_gdk_monitor(identifier: Option<MonitorIdentifier>) -> Result<Monitor> {
+    let display = gdk::Display::default().expect("could not get default display");
+    let monitor = match identifier {
+        Some(ident) => {
+            let mon = get_monitor_from_display(&display, &ident);
+            mon.with_context(|| {
+                let head = format!(
+                    "Failed to get monitor {}\nThe available monitors are:",
+                    ident
+                );
+                let mut body = String::new();
+                let monitors = display.monitors();
+                for i in 0..monitors.n_items() {
+                    if let Some(monitor) = monitors.item(i).and_downcast::<gdk::Monitor>() {
+                        if let Some(model) = monitor.model() {
+                            body.push_str(format!("\n\t[{}] {}", i, model).as_str());
+                        }
+                    }
+                }
+                format!("{}{}", head, body)
+            })?
+        }
+        None => {
+            let monitors = display.monitors();
+            if monitors.n_items() == 0 {
+                anyhow::bail!("No monitors found on the display");
+            }
+
+            monitors
+                .item(0)
+                .and_downcast::<gdk::Monitor>()
+                .context("Failed to get the primary monitor from the list of monitors")?
+        }
+    };
+    Ok(monitor)
+}
+
+// /// Get the name of monitor plug for given monitor number
+// /// workaround gdk not providing this information on wayland in regular calls
+// /// gdk_screen_get_monitor_plug_name is deprecated but works fine for that case
+// fn get_monitor_plug_name(display: &gdk::Display, monitor_num: i32) -> Option<&str> {
+//     unsafe {
+//         use glib::translate::ToGlibPtr;
+//         let plug_name_pointer = gdk_sys::gdk_screen_get_monitor_plug_name(
+//             display.default_screen().to_glib_none().0,
+//             monitor_num,
+//         );
+//         use std::ffi::CStr;
+//         CStr::from_ptr(plug_name_pointer).to_str().ok()
+//     }
+// }
+
+/// Returns the [Monitor][gdk::Monitor] structure corresponding to the identifer.
+/// Outside of x11, only [MonitorIdentifier::Numeric] is supported
+pub fn get_monitor_from_display(
+    display: &gdk::Display,
+    identifier: &MonitorIdentifier,
+) -> Option<gdk::Monitor> {
+    let monitors = display.monitors();
+    match identifier {
+        MonitorIdentifier::List(list) => {
+            for ident in list {
+                if let Some(monitor) = get_monitor_from_display(display, ident) {
+                    return Some(monitor);
+                }
+            }
+            None
+        }
+        MonitorIdentifier::Primary => {
+            if monitors.n_items() > 0 {
+                monitors.item(0).and_downcast::<gdk::Monitor>()
+            } else {
+                None
+            }
+        }
+        MonitorIdentifier::Numeric(num) => {
+            if *num < monitors.n_items() as i32 {
+                monitors.item(*num as u32).and_downcast::<gdk::Monitor>()
+            } else {
+                None
+            }
+        }
+        MonitorIdentifier::Name(name) => {
+            for i in 0..monitors.n_items() {
+                if let Some(monitor) = monitors.item(i).and_downcast::<gdk::Monitor>() {
+                    if let Some(model) = monitor.model() {
+                        if model == *name {
+                            return Some(monitor);
+                        }
+                    }
+                }
+            }
+            None
+        }
+    }
+}
+
+pub fn get_window_rectangle(
+    geometry: WindowGeometry,
+    screen_rect: gdk::Rectangle,
+) -> gdk::Rectangle {
+    let (offset_x, offset_y) = geometry
+        .offset
+        .relative_to(screen_rect.width(), screen_rect.height());
+    let (width, height) = geometry
+        .size
+        .relative_to(screen_rect.width(), screen_rect.height());
+    let x = screen_rect.x()
+        + offset_x
+        + geometry
+            .anchor_point
+            .x
+            .alignment_to_coordinate(width, screen_rect.width());
+    let y = screen_rect.y()
+        + offset_y
+        + geometry
+            .anchor_point
+            .y
+            .alignment_to_coordinate(height, screen_rect.height());
+    gdk::Rectangle::new(x, y, width, height)
+}

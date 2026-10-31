@@ -1,0 +1,19 @@
+(defwidget circ-prog [value class thickness]
+
+  ; (transform
+  ;   :rotate 75
+  ;   :translate-x "-30px"
+    ; :translate-y "0%"
+    (circular-progress
+      :value value
+      :class class
+      :thickness thickness
+      ; (transform
+      ;   :rotate 25
+      ;   :translate-x "0%"
+      ;   :translate-y "-100%"
+         (children)
+      ; )
+    )
+  ;)
+)

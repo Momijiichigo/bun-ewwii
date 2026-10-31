@@ -1,0 +1,92 @@
+;; Variables
+; (defpoll volume_percent 
+;   :interval "3s"
+;   :initial 0
+;   "amixer -D pulse sget Master | grep 'Left:' | awk -F'[][]' '{ print $2 }' | tr -d '%'")
+; (defpoll mic_percent :interval "3s" "amixer -D pulse sget Capture | grep 'Left:' | awk -F'[][]' '{ print $2 }' | tr -d '%'")
+(defpoll brightness_percent 
+  :interval "5s"
+  :initial 0
+  "brightnessctl -m -d intel_backlight | awk -F, '{print substr($4, 0, length($4)-1)}' | tr -d '%'"
+)
+
+;; Workspaces
+; these are updated by the scripts in `~/.config/hypr/scripts`
+(defvar wspaces "[[], [], [], []]")
+(defvar current_workspace "1")
+
+(defvar is_one_window_wspace false)
+; `dont_sleep` is used in `~/.config/hypr/hypridle.conf` to prevent the system from sleeping
+(defvar dont_sleep false)
+(defvar vol_reveal false)
+(defvar br_reveal false)
+(defvar music_reveal false)
+
+(defvar bluetooth_reveal false) ; deprecated - to be removed
+
+(defvar wifi_rev false)
+(defvar time_rev false)
+
+(defvar NOTIFICATION_ICON "󰂚")
+(defvar NOTIFICATION_ICON_COLOR "#a1bdce")
+
+(defvar meta_pressed false)
+
+
+(defvar battery_icons 
+  `["󰂎", "󰁺", "󰁼", "󰁽", "󰁾", "󰁿", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"]`
+)
+(defvar battery_icons_charging 
+  `["󰢟", "󰢜", "󰂆", "󰂇", "󰂈", "󰢝", "󰂉", "󰢞", "󰂊", "󰂋", "󰂅"]`
+)
+
+(defvar power_mode 1)
+
+(defvar bluetooth_icon "󰂯")
+(defvar bluetooth_icon_color "#8fc7f2")
+(defpoll bluetooth_connected_dev
+  :initial "No device connected"
+  :interval "1m"
+  "bluetoothctl devices Connected | rg 'Device [0-9:A-Z]+ (.+)$' -r '$1' -o || echo 'No device connected'"
+)
+
+(defpoll WLAN_ICON_COLOR 
+  :interval "5m"
+  :initial "#a1ceb2"
+  "bun run scripts/wifi/index.ts icon-color"
+)
+(defpoll ESSID_WLAN :interval "5m" "bun run scripts/wifi/index.ts essid")
+(defpoll WLAN_ICON :interval "5m" "bun run scripts/wifi/index.ts icon")
+
+(defvar card_power_state_icon_info
+  `{
+    "D0": ["#eda8a1", ""],
+    "D1": ["#edd7a1", "󱐋"],
+    "D2": ["#e3eda1", "󱐋"],
+    "D3hot": ["#a0ada9", "󰞍"],
+    "D3cold": ["gray", "󰼮"]
+  }`
+)
+(defpoll gpu_card_power_state
+  :interval "5m"
+  ; :initial "D0"
+  "cat /sys/class/drm/card0/device/power_state"
+)
+
+(deflisten music_current_pos
+  :initial 0
+  "playerctl -s metadata --format '{{ position }}' -F")
+
+;; e.g. `{ "spotify": "Playing", "vlc": "Paused" }`
+(defvar song_status_each `{}`)
+
+(deflisten current_music_player
+  :initial ""
+  "playerctl -s metadata --format '{{ playerName }}' -F")
+(defvar music_metadata `{}`)
+(defvar music_players `[]`)
+
+
+
+(defpoll calendar_day :interval "20h" "date '+%d'")
+(defpoll calendar_year :interval "20h" "date '+%Y'")

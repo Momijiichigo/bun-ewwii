@@ -1,0 +1,74 @@
+(defwindow wallpaper_clock
+  :geometry 
+    (geometry
+      :x "11%" 
+      :y "38%" 
+      :anchor "top right"
+      :width "600px"
+      :height "300px"
+    )
+  :namespace "wallpaper"
+  :focusable false
+  :stacking "bg"
+  :exclusive false
+  (clock)
+)
+(include "./yuck/wallp_widgets/music.yuck")
+(defwidget clock []
+  (box
+    :class "wallpaper_widget clock"
+    :orientation "h"
+    :space-evenly false
+    :valign "center"
+    :halign "end"
+    :vexpand true
+    :hexpand true
+    (box
+      :orientation "v"
+      :class "clock_wday_year"
+      :space-evenly false
+      :valign "center"
+      (label
+        :class "date"
+        :text {formattime(EWW_TIME, "%b %d")}
+      )
+      (label
+        :text {formattime(EWW_TIME, "%a")}
+        :class "weekday"
+      )
+      (label
+        :text {formattime(EWW_TIME, "%Y")}
+        :class "year"
+      )
+    )
+    (box
+      :orientation "v"
+      :space-evenly false
+      :valign "center"
+      :halign "end"
+      (wallpaper_music)
+      (box
+        :orientation "h"
+        :space-evenly false
+        ;:halign "end"
+
+        :class "time"
+        (label
+          :text {formattime(EWW_TIME, "%H")}
+        )
+        (scale
+          :class "time-progress"
+          :value {formattime(EWW_TIME, "%S")}
+          :active false
+          :max 60
+          :round-digits 0
+          :orientation "v"
+          :flipped true
+        )
+        (label
+          :text {formattime(EWW_TIME, "%M")}
+        )
+      )
+    )
+  )
+)

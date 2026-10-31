@@ -1,0 +1,48 @@
+
+(defwidget clock_module []
+  (eventbox
+    :onclick "$HOME/.config/eww/scripts/popup.ts open calendar"
+    (box
+      :class "module clock_module"
+      :space-evenly "false"
+      :orientation "h"
+      :tooltip {formattime(EWW_TIME, "%d %b, %Y")}
+      ; :spacing "3"
+      (label
+        :class "clock_date"
+        :text {formattime(EWW_TIME, "%d-%m")}
+      )
+      (label
+        :text {formattime(EWW_TIME, "%a")}
+        :class "weekday"
+      )
+      (label
+        :text {formattime(EWW_TIME, "\%H")}
+        :class "clock_hour_class"
+      )
+      (scale
+        :class "time-progress"
+        :value {formattime(EWW_TIME, "%S")}
+        :max 60
+        :round-digits 0
+        :orientation "v"
+        :flipped true
+      )
+      ; (label :text "" :class "clock_time_sep" )
+      (label
+        :text {formattime(EWW_TIME, "\%M")}
+        :class "clock_minute_class"
+      )
+      ; (box
+      ;   :orientation "v"
+      ;   :class "clock_wday_year"
+      ;   (label
+      ;     :text {formattime(EWW_TIME, "%Y")}
+      ;     :class "year"
+      ;   )
+      ; )
+    )
+  )
+)
+  
+

@@ -1,0 +1,38 @@
+
+
+(defwidget bluetooth [] 
+  (eventbox
+    :onhover "eww update bluetooth_reveal=true"
+    :onhoverlost "eww update bluetooth_reveal=false"
+    ;; Add `$USER ALL=(ALL) NOPASSWD: /usr/bin/rfkill` to `/etc/sudoers.d/rfkill-unblock`
+    ;;  to make password-exemption of rfkill command
+    :onclick "rfkill unblock bluetooth && alacritty --class float --command bluetuith &"
+    (label
+      :class "icon bluetooth"
+      :style "color: ${bluetooth_icon_color};" 
+      :text bluetooth_icon
+      :tooltip bluetooth_connected_dev
+    )
+    ;; (box
+    ;;   :vexpand "false"
+    ;;   :hexpand "false"
+    ;;   :space-evenly "false"
+    ;;   (label
+    ;;     :class "module-wif"
+    ;;     :style "color: ${bluetooth_icon_color};" 
+    ;;     :text bluetooth_icon
+    ;;   )
+    ;;   (revealer
+    ;;     :transition "slideright"
+    ;;     :reveal bluetooth_reveal 
+    ;;     :duration "350ms"
+    ;;     (label
+    ;;       :class "module_essid"
+    ;;       :style "color: ${bluetooth_icon_color};"
+    ;;       :text bluetooth_connected_dev
+    ;;     )
+    ;;   )
+    ;; )
+  )
+)
+

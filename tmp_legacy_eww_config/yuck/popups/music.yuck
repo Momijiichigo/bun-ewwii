@@ -1,0 +1,114 @@
+(defwidget music_page [player]
+  (eventbox
+    :onclick "eww update current_music_player=${player}"
+    (box
+      :class "page"
+      :orientation "h" 
+      :space-evenly "false" 
+      :vexpand "false" 
+      :hexpand "false"
+      (box 
+        :class "music_cover_art" 
+        :vexpand "false" 
+        :hexpand "false" 
+        :style "background-image: url('${
+          music_metadata?.[player]?.["mpris:artUrl"]
+            ?: "images/music.png"
+        }');"
+      )
+      (box 
+        :orientation "v"
+        :spacing 20 
+        :space-evenly "false" 
+        :vexpand "false" 
+        :hexpand "false"
+        (label 
+          :halign "center"
+          :class "music"
+          :wrap "true"
+          :limit-width 17 
+          :text {
+            music_metadata?.[player]?.["xesam:title"] ?: ""
+          }
+        )
+        (label 
+          :halign "center" 
+          :class "music_artist" 
+          :wrap "true" 
+          :limit-width 18 
+          :text {
+            music_metadata?.[player]?.["xesam:artist"] ?: "..."
+          }
+        )
+        (box
+          :orientation "h" 
+          :spacing 15 
+          :halign "center" 
+          :space-evenly "false" 
+          :vexpand "false" 
+          :hexpand "false"
+          (button 
+            :class "music_btn_prev" 
+            :onclick "playerctl --player=${player} previous"
+            ""
+          )
+          (button 
+            :class "music_btn_play" 
+            :onclick "playerctl --player=${player} play-pause"
+            {song_status_each?.[player] == "Playing" ? " " : " "}
+          )
+          (button 
+            :class "music_btn_next" 
+            :onclick "playerctl --player=${player} next"
+            ""
+          )
+        )
+        (box 
+          :class "music_bar" 
+          :halign "center" 
+          :vexpand "false" 
+          :hexpand "false" 
+          :space-evenly "false"
+          (scale 
+            :max {(music_metadata?.[player]?.["mpris:length"] ?: 0) / 1000000}
+            :onchange "playerctl --player=${player} position {}"
+            :value {
+              song_status_each?.[player] == "Playing"
+                ? music_current_pos / 1000000
+                : 0
+            }
+          )
+        )
+      )
+    )
+  )
+)
+;;  Music
+(defwidget music_pop []
+  (eventbox
+    :onhoverlost "~/.config/eww/scripts/popup.ts close music_win"
+    (scroll
+      :class "popup music_pop"
+      (literal
+        :content {
+          music_players == "[]"
+            ? '(music_page :player "")'
+            : `(box
+              :orientation "v"
+              :space-evenly "false"
+              (music_page :player current_music_player)
+              (for player in music_players
+                (literal
+                  :content {
+                    current_music_player == player
+                      ? ""
+                      : "(music_page :player player)"
+                  }
+                )
+              )
+            )`
+        }
+      )
+    )
+  )
+)

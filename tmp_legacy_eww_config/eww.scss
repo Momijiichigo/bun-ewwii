@@ -1,0 +1,325 @@
+/** EWW.SCSS
+ **/
+@import './yuck/wallp_widgets/style.scss';
+// Popups 
+@import './yuck/popups/style.scss';
+
+@import './yuck/frutiger_bar/bar.scss';
+
+* {
+  all: unset;
+  // font-family: FiraCode Nerd Font, DaddyTimeMono NF;
+  // border: 0.2px solid red;
+}
+
+
+.phantom {
+  font-size: 0;
+  margin: 0;
+  padding: 0;
+}
+
+/** General **/
+.bar_class,
+.sys_win {
+  font-family: FiraCode Nerd Font, DaddyTimeMono NF, Source Han Sans JP;
+}
+
+.bar_class {
+  font-size: 11px;
+  font-weight: 200;
+  background-color: rgba(30, 30, 33, 0.6);
+  // border-radius: 8px;
+  border-top-right-radius: 0px;
+  border-top-left-radius: 0px;
+
+  .separ {
+    color: #3e424f;
+    font-weight: bold;
+    font-size: 1.2em;
+    margin: 0em 0.5em -0.1em 0.5em;
+  }
+
+  .clock_module {
+
+    color: #bfc9db;
+    font-weight: 400;
+    margin-right: 0.5em;
+
+    // .clock_wday_year {
+    //   margin: 0px;
+    //   margin-right: 8px;
+    //   .year {
+    //     font-size: 0.7em;
+    //     margin-bottom: -2px;
+    //   }
+    // }
+    .clock_date {
+      font-size: 1.1em;
+      margin: 0px;
+      margin-right: 0.4em;
+      // margin-top: 3px;
+    }
+
+    .weekday {
+      font-size: 1.2em;
+      // margin-bottom: -0.5em;
+      margin-right: 0.4em;
+      margin-left: 0.4em;
+    }
+
+    .clock_time_sep {
+      font-size: 1em;
+      margin: 0px 0px 0px 0px;
+    }
+
+    .time-progress {
+      margin-bottom: 0.2em;
+      margin-top: 0.1em;
+      margin-left: 0.15em;
+      margin-right: 0.15em;
+
+      trough {
+        all: unset;
+        min-width: 0.1em;
+        background-color: #444444;
+
+        highlight {
+          all: unset;
+          background-color: #bfc9db;
+          border-radius: 24px;
+        }
+      }
+    }
+
+    .clock_hour_class,
+    .clock_minute_class {
+      font-size: 1.3em;
+    }
+
+
+    .clock_minute_class {
+      margin: 0px 0.1em 0px 0.2em;
+    }
+
+    .clock_hour_class {
+      // font-weight: bold;
+      margin: 0px 0.3em 0px 0.2em;
+    }
+  }
+
+  .cpubar {
+    color: #a1bdce;
+    background-color: #38384d;
+    border-radius: 10px;
+  }
+
+  .membar {
+    color: #e0b089;
+    background-color: #38384d;
+    border-radius: 10px;
+  }
+
+
+  .brightbar trough highlight {
+    background-image: linear-gradient(to right, #e4c9af 30%, #f2cdcd 50%, #e0b089 100% *50);
+    border-radius: 10px;
+  }
+
+  .volbar trough highlight {
+    background-image: linear-gradient(to right, #afcee0 30%, #a1bdce 50%, #77a5bf 100% *50);
+    border-radius: 10px;
+  }
+
+  .module_essid {
+    font-size: 1em;
+    // color: #a1bdce;
+    margin: 0px 10px 0px 0px;
+    font-weight: 400;
+  }
+
+  .icon {
+    font-size: 1.2em;
+    border-radius: 100%;
+    margin: 0px 0.5em 0px 0.5em;
+  }
+
+  .icon.bluetooth {
+    // margin-right: 0em;
+  }
+
+  .icon.wifi {
+    margin: 0px 0.4em 0px 0.5em;
+  }
+
+  .module-notification {
+    color: #a1bdce;
+    margin: 0px 0.18em 0px 0px;
+    font-size: 1.1em;
+  }
+
+  .bright_icon {
+    font-size: 1em;
+    color: #e4c9af;
+    margin: 0px 10px 0px 10px;
+  }
+
+  .systray {
+    background-color: rgba(196, 185, 175, 0.4);
+    border-radius: 0.5em;
+    margin: 0.2em -0.4em;
+    padding: 0px 0.7em;
+    // margin-right: 0.5em;
+  }
+
+
+  .dont_sleep {
+    font-size: 1.2em;
+    color: #a1bdce;
+    margin: 0px 0.7em 0px 0px;
+  }
+
+  .iconbat,
+  .iconmem,
+  .iconcpu {
+    font-size: 1em;
+  }
+
+  .bat_module {
+    // border-radius: 16px;
+    // margin: 2px 4px 2px 4px;
+    // color: #dae6cf;
+    font-size: 1em;
+    margin-left: -0.4em;
+
+    .iconbat {
+      font-size: 1.3em;
+    }
+  }
+
+
+
+  .cpu_module {
+    color: #a1bdce;
+    // margin: 2px 4px 2px 4px;
+    margin-right: 3px;
+
+    .iconcpu {
+      // margin-top: 4px;
+      margin-right: -10px;
+    }
+  }
+
+  .mem_module {
+    color: #e0b089;
+    margin-right: 5px;
+
+    // margin: 2px 4px 2px 4px;
+    .iconmem {
+      // margin-left: 6px;
+    }
+  }
+
+  .works {
+    // font-size: 0.5em;
+    font-weight: normal;
+    margin: 0px 0px 0px 0.5em;
+    // color: #a1bdce;
+    .workspace-dot {
+      border-radius: 1.5em;
+      padding: 0px 0.8em;
+      background-color: rgb(161, 207, 205, 0.4);
+      transition: 0.2s;
+      margin: 0.2em 0.3em;
+      &:hover {
+        background-color: rgba(161, 207, 205, 0.8);
+      }
+      &.active {
+        padding: 0px 1.5em;
+        background-color: rgba(161, 207, 205, 1);
+        color: #0f0f17;
+      }
+    }
+    // background-color: #0f0f17;
+  }
+
+  .music_module {
+    // padding: 0px 5px 0px 5px;
+    font-family: FiraCode Nerd Font, Source Sans Variable, Source Han Sans JP, Cantarell;
+    color: #bfc9db;
+    color: #e9f5ed;
+
+    .song_cover_art {
+      background-size: cover;
+      background-position: center;
+      margin: 0.1em 0px 0.1em 0px;
+      min-height: 0.5em;
+      min-width: 1.5em;
+      // margin: 2px;
+      border-radius: 100px;
+    }
+
+    .song {
+      // color: #a1bdce;
+      font-size: 1.1em;
+      font-weight: 400;
+      margin: -0.0em 0em -0.0em 0.5em;
+    }
+
+    .song_btn_play {
+      // color: #a1bdce;
+      font-size: 1.2em;
+      margin: 0px 0px 0px 0.5em;
+
+    }
+
+
+    .song_btn_prev,
+    .song_btn_next {
+      // color: #bfc9db;
+      font-size: 1em;
+      margin: 0px 0px 0px 0.3em;
+
+    }
+
+  }
+}
+
+.module {
+  margin: 0px 0px 0px 0px;
+  border-radius: 0px 16px 0px 10px;
+}
+
+/** tooltip!! **/
+tooltip {
+  &.background {
+    background-color: rgba(23, 21, 15, 0.6);
+    font-size: 13px;
+    border-radius: 0.3em;
+    color: #cddbbf;
+  }
+
+  label {
+    margin: 0.1em;
+  }
+}
+
+
+/** Widgets **/
+
+
+
+
+scale trough {
+  all: unset;
+  background-color: #22242b;
+  box-shadow: 0px 2px 3px 2px #06060b;
+  border-radius: 16px;
+  // min-height: 10px;
+  // min-width: 70px;
+  margin: 0px 10px 0px 0px;
+}
+
+
+
+

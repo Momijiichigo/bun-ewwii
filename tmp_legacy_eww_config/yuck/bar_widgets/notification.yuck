@@ -1,0 +1,16 @@
+(defwidget notification_icon []
+  (eventbox
+    ; :onhover "eww update wifi_rev=true"
+    ; :onhoverlost "eww update wifi_rev=false"
+    :onclick "swaync-client -rs && swaync-client -R && swaync-client -op"
+    (box
+      :vexpand "false"
+      :hexpand "false"
+      :space-evenly "false"
+      (label
+        :class "module-notification"
+        :style "color: ${NOTIFICATION_ICON_COLOR};" 
+        :text NOTIFICATION_ICON )
+    )
+  )
+)

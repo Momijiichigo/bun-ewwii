@@ -1,0 +1,115 @@
+.frutiger_bar {
+  .works {
+    // font-size: 0.5em;
+    font-weight: normal;
+    margin: 0px 0px 0px 0.5em;
+
+    // color: #a1bdce;
+    .workspace-dot {
+      border-radius: 1.5em;
+      padding: 0px 0.8em;
+      // background-color: rgb(161, 207, 205, 0.4);
+      margin: 0.2em 0.3em;
+      // border: 0.5px solid rgba(255, 255, 255, 0.6);
+      box-shadow: 0px 0.7px 1px 1px rgba(200, 255, 255, 0.7), 
+        0px -0.5px 1.05px 1px rgba(30, 30, 30, 0.6),
+        0px 0px 3px 2px rgba(70, 70, 80, 0.3);
+
+      background: radial-gradient(
+        ellipse 70% 40% at 50% 20%,
+        rgba(255, 255, 255, 0.35) 0%,
+        rgba(255, 255, 255, 0.3) 39%,
+        rgba(255, 255, 255, 0) 40%,
+        rgba(0, 28, 66, 0) 100%
+      ), radial-gradient(
+        circle at 50% 85%,
+        rgba(69, 69, 69, 0.5) 0%,
+        rgba(97, 97, 97, 0.3) 50%,
+        rgba(33, 33, 33, 0.3) 100%
+      );
+      transition: 0.2s, box-shadow 0.5s, width 0.2s;
+
+      &:hover {
+        background: radial-gradient(
+          ellipse 70% 40% at 50% 20%,
+          rgba(255, 255, 255, 0.35) 0%,
+          rgba(255, 255, 255, 0.3) 39%,
+          rgba(255, 255, 255, 0) 40%,
+          rgba(0, 28, 66, 0) 100%
+        ), radial-gradient(
+          circle at 50% 85%,
+          rgba(0, 234, 255, 1) 0%,
+          rgba(29, 129, 140, 0.6) 50%,
+          rgba(0, 28, 66, 0.3) 100%
+        );
+        box-shadow: 0px 0.7px 1px 0.5px rgba(240, 240, 240, 0.6),
+          0px -1px 1px 0.5px rgba(30, 30, 30, 0.6),
+          0px 0.7px 2px 1.5px rgba(100, 234, 255, 0.9);
+        transition: 0.2s, box-shadow 0.5s, background 0.5s;
+
+        // `:active` means mouse-down
+        &:active {
+          background: radial-gradient(
+            ellipse 70% 40% at 50% 20%,
+            rgba(255, 255, 255, 0.35) 0%,
+            rgba(255, 255, 255, 0.3) 39%,
+            rgba(255, 255, 255, 0) 40%,
+            rgba(0, 28, 66, 0) 100%
+          ), radial-gradient(
+            circle at 50% 85%,
+            rgba(0, 234, 255, 1) 0%,
+            rgba(0, 49, 54, 0.8) 50%,
+            rgba(0, 28, 66, 0.8) 100%
+          );
+          box-shadow: 0px 0.7px 1px 0.5px rgba(240, 240, 240, 0.6),
+            0px -1px 1px 0.5px rgba(30, 30, 30, 0.6),
+            0px 0.7px 2px 1.5px rgba(100, 234, 255, 0.4);
+          transition: none;
+        }
+      }
+
+      // `.active` means active workspace
+      &.active {
+        padding: 0px 1.5em;
+        background: radial-gradient(
+          ellipse 70% 40% at 50% 20%,
+          rgba(255, 255, 255, 0.35) 0%,
+          rgba(255, 255, 255, 0.3) 39%,
+          rgba(255, 255, 255, 0) 40%,
+          rgba(0, 28, 66, 0) 100%
+        ), radial-gradient(
+          ellipse at 50% 90%,
+          rgba(0, 234, 255, 1) 0%,
+          rgba(29, 129, 140, 0.9) 50%,
+          rgba(0, 28, 66, 0.5) 100%
+        );
+        box-shadow: 0px 0.7px 1px 0.5px rgba(240, 240, 240, 0.6),
+          0px -1px 1px 0.5px rgba(30, 30, 30, 0.6),
+          0px 0.7px 2px 1.5px rgba(100, 234, 255, 0.6);
+
+        &:hover {
+          box-shadow: 0px 0.7px 1px 0.5px rgba(240, 240, 240, 0.6),
+            0px -1px 1px 0.5px rgba(30, 30, 30, 0.6),
+            0px 0.7px 2px 1.5px rgba(100, 234, 255, 0.9);
+
+          // &:active {
+          //   box-shadow: 0px -1px 1px 0.5px rgba(30, 30, 30, 0.6),
+          //     0px 0.7px 1px 0.5px rgba(240, 240, 240, 0.6),
+          //     0px 0.7px 2px 1.5px rgba(100, 234, 255, 0.4);
+          //
+          // }
+
+        }
+
+        transition: background 0.5s,
+        box-shadow 0.5s,
+        padding 0.2s,
+        width 0.2s;
+        color: #0f0f17;
+      }
+    }
+
+    // background-color: #0f0f17;
+  }
+
+}

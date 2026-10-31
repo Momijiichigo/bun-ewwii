@@ -1,0 +1,11 @@
+(include "./yuck/wallp_widgets/clock.yuck")
+(defwidget wallp-widget []
+  
+  (box
+    :class "wallpaper_widget"
+    :space-evenly false
+
+    (clock)
+
+  )
+)

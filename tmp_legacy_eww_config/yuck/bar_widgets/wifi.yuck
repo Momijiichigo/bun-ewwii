@@ -1,0 +1,34 @@
+
+(defwidget wifi [] 
+  (eventbox
+    :onhover "eww update wifi_rev=true"
+    :onhoverlost "eww update wifi_rev=false"
+    :onclick "alacritty --class nmtui --command nmtui &"
+    (label
+      :class "icon wifi"
+      :style "color: ${WLAN_ICON_COLOR};" 
+      :tooltip ESSID_WLAN
+      :text "${WLAN_ICON} "
+    )
+    ; (box
+    ;   :vexpand "false"
+    ;   :hexpand "false"
+    ;   :space-evenly "false"
+    ;   (label
+    ;     :class "icon wifi"
+    ;     :style "color: ${WLAN_ICON_COLOR};" 
+    ;     :text WLAN_ICON)
+    ;   (revealer
+    ;     :transition "slideright"
+    ;     :reveal wifi_rev
+    ;     :duration "350ms"
+    ;     (label
+    ;       :class "module_essid"
+    ;       :style "color: ${WLAN_ICON_COLOR};"
+    ;       :text ESSID_WLAN
+    ;     )
+    ;   )
+    ; )
+  )
+)
+

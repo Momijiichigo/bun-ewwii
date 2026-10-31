@@ -1,0 +1,45 @@
+(defwidget powermenu_entry [label icon onclick]
+  (box :orientation "v":space-evenly false :class "powermenu-entry"
+    (button :class "powermenu-button":onclick {onclick}
+      (label :class "powermenu-icon":text {icon})
+    )
+    (label :class "powermenu-text":text {label})
+  )
+)
+
+(defwidget powermenu []
+  (eventbox
+    :onclick "eww close powermenu"
+    (box 
+      :orientation "h"
+      :space-evenly true 
+      :valign "center"
+      :halign "center"
+      :class "powermenu-box"
+      (powermenu_entry
+        :label "Power off"
+        :icon "󰐥"
+        :onclick "hyprshutdown --post-cmd 'systemctl poweroff'")
+      (powermenu_entry
+        :label "Reboot"
+        :icon "󰜉"
+        :onclick "hyprshutdown --post-cmd 'systemctl reboot'")
+      (powermenu_entry
+        :label "Hibernate"
+        :icon "󰖔"
+        :onclick "sleep 0.1 && hyprlock & systemctl hibernate & eww close powermenu &")
+      (powermenu_entry
+        :label "Sleep"
+        :icon "󰤄"
+        :onclick "sleep 0.1 && systemctl suspend & eww close powermenu &")
+      (powermenu_entry
+        :label "Lock"
+        :icon ""
+        :onclick "sleep 0.1 && hyprlock & eww close powermenu &")
+      (powermenu_entry
+        :label "Sign out"
+        :icon "󰗼"
+        :onclick "hyprshutdown -t 'Signing out...'")
+    )
+  )
+)

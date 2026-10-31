@@ -1,0 +1,12 @@
+; calendar
+(defwidget cal []
+  (eventbox
+    :onhoverlost "~/.config/eww/scripts/popup.ts close calendar"
+    (calendar
+      :class "popup"
+      ; :day {formattime(EWW_TIME, "%d")}
+      ; :year {formattime(EWW_TIME, "%y")}
+      :show-details true
+    )
+  )
+)

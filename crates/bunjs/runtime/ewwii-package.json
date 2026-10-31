@@ -1,0 +1,12 @@
+{
+  "name": "ewwii",
+  "version": "0.0.0-bun-ewwii",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./widgets.js",
+    "./widgets": "./widgets.js",
+    "./tools": "./tools.js",
+    "./reactive": "./reactive.js"
+  }
+}

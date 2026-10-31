@@ -1,0 +1,20 @@
+(defwidget mem []
+  (box
+    :class "mem_module"
+    :vexpand "false"
+    :hexpand "false" 
+    :tooltip "using ${round(EWW_RAM.used_mem_perc, 0)}% ram"
+    (label 
+      :class "iconmem"
+      :limit-width 2
+      :show-truncated false
+      :wrap false
+      :unindent true
+      :text " "
+    )
+    (label 
+      :class "mem_perc"
+      :text "${round(EWW_RAM.used_mem_perc, 0)}%"
+    )
+  )
+)

@@ -1,0 +1,184 @@
+(include "./yuck/variables.yuck")
+
+;; Wallpaper Widgets
+(include "./yuck/wallp_widgets/default.yuck")
+
+(include "./yuck/frutiger_bar/bar.yuck")
+
+;; Desktop Bar
+(defwindow bar [screen]
+  :geometry
+    (geometry
+      :x "0%"
+      ;; currently the variable is not in the scope
+      ;; so the code below gives an error
+
+      ; :y {is_one_window_wspace ? "0px" : "2px"}
+      ; :width {
+      ;   is_one_window_wspace ? "100%" : "99.5%"
+      ; }
+      :y "0px"
+      :width "100%"
+      :height "10px"
+      :anchor "top center"
+    )
+  :stacking "fg"
+  :windowtype "toolbar"
+  :exclusive true
+  (box
+    :class "bar_class"
+    ; :style "border-radius: ${is_one_window_wspace ? "0px" : "8px"}"
+    :orientation "h"
+    (left :screen screen)
+    (center)
+    (right)
+  )
+)
+
+(defwidget sep []
+  (box :vexpand "false" :hexpand "false"
+    (label :class "separ" :text "|")
+  )
+)
+
+(include "./yuck/bar_widgets/bright.yuck")
+(include "./yuck/bar_widgets/wifi.yuck")
+(include "./yuck/bar_widgets/bluetooth.yuck")
+
+(include "./yuck/bar_widgets/battery.yuck")
+(include "./yuck/bar_widgets/memory.yuck")
+(include "./yuck/bar_widgets/cpu.yuck")
+
+(include "./yuck/bar_widgets/clock.yuck")
+
+(include "./yuck/bar_widgets/notification.yuck")
+
+(defwidget right []
+  (box
+    :orientation "h"
+    :space-evenly false  
+    :halign "end"
+    :class "right_modules"
+    ; (bright)
+    ; (volume)
+    (bluetooth)
+    (wifi)
+
+    (sep)
+
+    (systray
+      :class "systray"
+      :spacing 10
+      :icon-size 13
+    )
+    (sep)
+    
+    (eventbox
+      :onclick "eww update dont_sleep=${!dont_sleep}"
+      (label
+        :class "dont_sleep"
+        :tooltip {dont_sleep ? "Don't allow system to sleep" : "Allow system to sleep"}
+        :style {dont_sleep ? "color: #caa1ce;" : "color: #a1bdce;"}
+        :text {dont_sleep ? "󰒳 " : "󰒲 "}
+      )
+    )
+    (eventbox
+      :onclick "./scripts/popup.ts open system"
+      (box
+        :space-evenly true  
+        :halign "end"
+        ; (mem)
+        ; (cpu)
+        (bat)
+      )
+    )
+
+    (sep)
+
+    (notification_icon)
+
+    (sep)
+
+    (clock_module)
+  )
+)
+
+(include "./yuck/bar_widgets/workspaces.yuck")
+(defwidget left [screen]
+  (box
+    :orientation "h" 
+    :space-evenly false  
+    :halign "start"
+    :class "left_modules"
+    (workspaces :screen screen)
+  )
+)
+
+(include "./yuck/bar_widgets/music.yuck")
+(defwidget center []
+  (box
+    :orientation "h" 
+    :space-evenly false
+    :halign "center"
+    :class "center_modules"
+    (music)
+  )
+)
+
+
+;; Popups
+
+(include "./yuck/popups/powermenu.yuck")
+(defwindow powermenu
+  :monitor 0
+  :stacking "overlay"
+  :geometry 
+    (geometry 
+      :anchor "center"
+      :width "100%"
+      :height "120%")
+  :namespace "eww-blur"
+  (powermenu)
+)
+
+
+(include "./yuck/popups/calendar.yuck")
+(defwindow calendar
+  :geometry 
+    (geometry
+      :x "6px"
+      :y "6px" 
+      :anchor "top right"
+      :width "300px" 
+      :height "60px"
+    )
+  (cal)
+)
+
+
+(include "./yuck/popups/system.yuck")
+(defwindow system
+  :geometry 
+    (geometry
+      :x "6px" 
+      :y "5px" 
+      :anchor "top right"
+      :width "290px" 
+      :height "120px"
+    )
+  (system)
+)
+
+
+;;  music
+(include "./yuck/popups/music.yuck")
+(defwindow music_win 
+  :stacking "fg" 
+  :focusable "false" 
+  :screen 1
+  :geometry 
+    (geometry :x "0" :y "5px" :width 428 :height 104 :anchor "top center")
+  (music_pop)
+)
+
+

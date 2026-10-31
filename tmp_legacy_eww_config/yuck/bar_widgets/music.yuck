@@ -1,0 +1,50 @@
+;;  Music 
+(defwidget music [] 
+  (eventbox
+    :onhover "eww update music_reveal=true"
+    :onclick "~/.config/eww/scripts/popup.ts open music_win"
+    :onhoverlost "eww update music_reveal=false"
+    (box
+      :class "music_module"
+      :orientation "h"
+      :space-evenly "false"
+      (box
+        :class "song_cover_art"
+        :style "background-image: url('${
+            music_metadata[current_music_player]?.["mpris:artUrl"]
+              ?: "images/music.png"
+        }');"
+      )
+      (label 
+        :class "song"
+        :limit-width 20
+        :text {
+          music_metadata[current_music_player]?.["xesam:title"] ?: ""
+        }
+      )
+      (revealer
+        :transition "slideright"
+        :reveal music_reveal
+        :duration "350ms"
+        (box :orientation "h" 
+          (button
+            :class "song_btn_prev"
+            :onclick "playerctl --player=${current_music_player} previous"
+            ""
+          )
+          (button 
+            :class "song_btn_play"
+            :onclick "playerctl --player=${current_music_player} play-pause"
+            {song_status_each[current_music_player] == "Playing" ? " " : " "} 
+          )
+          (button 
+            :class "song_btn_next"
+            :onclick "playerctl --player=${current_music_player} next"
+            ""
+          )
+        )
+      )
+    )
+  )
+)
+

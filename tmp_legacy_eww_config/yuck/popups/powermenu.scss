@@ -1,0 +1,33 @@
+.powermenu-box {
+    // @include window;
+    font-size: 15px;
+    padding-left: 2.5em;
+    padding-right: 2.5em;
+    padding-top: 3em;
+    padding-bottom: 3em;
+}
+
+.powermenu-entry {
+    margin: 0 0.5em;
+}
+
+.powermenu-button {
+    // background-color: $surfaceVariant;
+    background-color: rgba(15, 15, 23, 0.85);
+    border-radius: 1em;
+    transition: 0.3s;
+    padding: 3.25em 4em;
+}
+
+.powermenu-button:hover {
+    // background-color: mix($surfaceVariant, $onSurfaceVariant, 70%);
+}
+
+.powermenu-icon {
+    font-size: 4em;
+}
+
+.powermenu-text {
+    margin-top: 0.5em;
+    font-size: 1.3em;
+}

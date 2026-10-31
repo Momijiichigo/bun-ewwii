@@ -1,0 +1,43 @@
+#!/usr/bin/sh
+
+## Files and cmd
+FILE="$HOME/.cache/eww_launch.xyz"
+
+
+## Run eww daemon if not running already
+# if [[ ! `pidof eww` ]]; then
+#     eww daemon
+#     sleep 1
+# fi
+
+# # Run the hyprctl command and pipe the output to grep
+# # Use grep to match lines that start with 'Monitor' and extract the monitor names
+# monitor_list=$(hyprctl monitors all | rg '^Monitor (.+) \(ID (.+)\)' -r '$1' -o)
+#
+# # Convert the monitor names into a bash array
+# monitor_array=($monitor_list)
+# ## Open widgets 
+# screen_counter=0
+# for monitor in "${monitor_array[@]}"
+# do
+#   # echo "running: eww open-many bar:bar_$monitor \
+#   #   --arg bar_$monitor:screen=$screen_counter"
+#   #
+#   eww open-many bar:bar_$monitor \
+#     --arg bar_$monitor:screen=$screen_counter
+#
+#   eww open-many wallpaper_clock:wallpaper_clock_$monitor \
+#     --arg wallpaper_clock_$monitor:screen=$screen_counter
+#
+#
+#   screen_counter=$((screen_counter+1))
+# done
+
+# eww open wallpaper_clock --screen 0 
+
+# Run the main loop of wifi status listener
+nohup bun run $HOME/.config/eww/scripts/wifi/index.ts main > /dev/null &
+# Run the main loop of notification (swaync) status listener
+nohup bun run $HOME/.config/eww/scripts/swaync/index.ts main > /dev/null &
+# Run the main loop of music status listener
+nohup bun run $HOME/.config/eww/scripts/music/index.ts main > /dev/null &

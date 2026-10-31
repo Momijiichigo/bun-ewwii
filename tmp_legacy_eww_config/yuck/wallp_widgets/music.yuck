@@ -1,0 +1,43 @@
+(defwidget wallpaper_music []
+  (box
+    :class "music_info"
+    :visible {song_status_each[current_music_player] == "Playing" ? true : false}
+    :orientation "h"
+    :space-evenly false
+    :valign "center"
+    :halign "start"
+    :vexpand true
+    :hexpand true
+    (box
+      :class "song_cover_art"
+      :visible {music_metadata[current_music_player]?.["mpris:artUrl"] == "" ? false : true}
+      :style "background-image: url('${music_metadata[current_music_player]?.["mpris:artUrl"]}');"
+    )
+    (box
+      :orientation "v"
+      :space-evenly false
+      :valign "center"
+      (label
+        :class "title"
+        :xalign 0
+        :limit-width 30
+        :text {
+          music_metadata[current_music_player]?.["xesam:title"] ?: ""
+        }
+      )
+      (scale
+        :class "time-progress"
+        :visible {music_metadata[current_music_player]?.["mpris:length"] != 0}
+        :value {music_current_pos == "" ? 0 : music_current_pos}
+        :max {music_metadata[current_music_player]?.["mpris:length"] ?: 0}
+        :round-digits 0
+        :orientation "h"
+      )
+      (label
+        :class "artist"
+        :xalign 0
+        :text {music_metadata[current_music_player]?.["xesam:artist"] ?: "..."}
+      )
+    )
+  )
+)

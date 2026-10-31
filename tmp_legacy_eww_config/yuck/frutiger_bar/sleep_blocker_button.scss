@@ -1,0 +1,194 @@
+
+.frutiger_bar {
+  .sleep_block_button {
+    &.dont_sleep {
+
+      // background-image: linear-gradient(
+      //   to bottom,
+      //   rgba(255, 255, 255, 0.3) 0%,
+      //   rgba(255, 255, 255, 0.2) 49%,
+      //   rgba(255, 255, 255, 0) 50%,
+      //   rgba(0, 0, 0, 0) 100%
+      // ), linear-gradient(
+      background-image: radial-gradient(
+        ellipse 70% 40% at 50% 20%,
+        rgba(255, 255, 255, 0.35) 0%,
+        rgba(255, 255, 255, 0.3) 39%,
+        rgba(255, 255, 255, 0) 40%,
+        rgba(0, 28, 66, 0) 100%
+      ), linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0.2) 0%,
+        rgba(255, 255, 255, 0) 10px,
+        rgba(255, 255, 255, 0) 10px,
+        rgba(0, 0, 0, 0.2) 100%
+      ), radial-gradient(
+        ellipse at 50% 85%,
+        rgba(255, 122, 122, 1) 0%,
+        rgba(140, 29, 57, 0.5) 50%,
+        rgba(0, 28, 66, 0.3) 100%
+      );
+      &:hover {
+        box-shadow: 0px 0.7px 2px 1.5px rgba(100, 234, 255, 0.9);
+
+        // background-image: linear-gradient(
+        //   to bottom,
+        //   rgba(255, 255, 255, 0.5) 0%,
+        //   rgba(255, 255, 255, 0.3) 49%,
+        //   rgba(255, 255, 255, 0) 50%,
+        //   rgba(0, 0, 0, 0) 100%
+        // ), linear-gradient(
+        background-image: radial-gradient(
+          ellipse 70% 40% at 50% 20%,
+          rgba(255, 255, 255, 0.35) 0%,
+          rgba(255, 255, 255, 0.3) 39%,
+          rgba(255, 255, 255, 0) 40%,
+          rgba(0, 28, 66, 0) 100%
+        ), linear-gradient(
+          to right,
+          rgba(0, 0, 0, 0.2) 0%,
+          rgba(255, 255, 255, 0) 10px,
+          rgba(255, 255, 255, 0) 10px,
+          rgba(0, 0, 0, 0.2) 100%
+        ), radial-gradient(
+          ellipse at 50% 85%,
+          rgba(255, 122, 122, 1) 0%,
+          rgba(140, 29, 57, 0.7) 70%,
+          rgba(0, 28, 66, 0.3) 100%
+        );
+
+        transition: background-image 0.5s, box-shadow 0.5s;
+
+        &:active {
+
+          // background-image: linear-gradient(
+          //   to bottom,
+          //   rgba(255, 255, 255, 0.5) 0%,
+          //   rgba(255, 255, 255, 0.4) 49%,
+          //   rgba(255, 255, 255, 0) 50%,
+          //   rgba(0, 0, 0, 0) 100%
+          // ), linear-gradient(
+          background-image: radial-gradient(
+            ellipse 70% 40% at 50% 20%,
+            rgba(255, 255, 255, 0.35) 0%,
+            rgba(255, 255, 255, 0.3) 39%,
+            rgba(255, 255, 255, 0) 40%,
+            rgba(0, 28, 66, 0) 100%
+          ), linear-gradient(
+            to right,
+            rgba(0, 0, 0, 0.2) 0%,
+            rgba(255, 255, 255, 0) 10px,
+            rgba(255, 255, 255, 0) 10px,
+            rgba(0, 0, 0, 0.2) 100%
+          ), radial-gradient(
+            ellipse at 50% 85%,
+            rgba(255, 122, 122, 1) 0%,
+            rgba(140, 29, 57, 0.7) 30%,
+            rgba(0, 28, 66, 0.3) 100%
+          );
+          transition: background-image 0s;
+        }
+      }
+    }
+    &.allow_sleep {
+
+      // background-image: linear-gradient(
+      //   to bottom,
+      //   rgba(255, 255, 255, 0.3) 0%,
+      //   rgba(255, 255, 255, 0.2) 49%,
+      //   rgba(255, 255, 255, 0) 50%,
+      //   rgba(0, 0, 0, 0) 100%
+      // ), linear-gradient(
+      background-image: radial-gradient(
+        ellipse 70% 40% at 50% 20%,
+        rgba(255, 255, 255, 0.35) 0%,
+        rgba(255, 255, 255, 0.3) 39%,
+        rgba(255, 255, 255, 0) 40%,
+        rgba(0, 28, 66, 0) 100%
+      ), linear-gradient(
+        to right,
+        rgba(0, 0, 0, 0.2) 0%,
+        rgba(255, 255, 255, 0) 10px,
+        rgba(255, 255, 255, 0) 10px,
+        rgba(0, 0, 0, 0.2) 100%
+      ), radial-gradient(
+        ellipse at 50% 85%,
+        rgba(64, 255, 0, 1) 0%,
+        rgba(29, 140, 96, 0.3) 50%,
+        rgba(0, 28, 66, 0.3) 100%
+      );
+      &:hover {
+        box-shadow: 0px 0.7px 2px 1.5px rgba(100, 234, 255, 0.9);
+
+        // background-image: linear-gradient(
+        //   to bottom,
+        //   rgba(255, 255, 255, 0.5) 0%,
+        //   rgba(255, 255, 255, 0.3) 49%,
+        //   rgba(255, 255, 255, 0) 50%,
+        //   rgba(0, 0, 0, 0) 100%
+        // ), linear-gradient(
+        background-image: radial-gradient(
+          ellipse 70% 40% at 50% 20%,
+          rgba(255, 255, 255, 0.35) 0%,
+          rgba(255, 255, 255, 0.3) 39%,
+          rgba(255, 255, 255, 0) 40%,
+          rgba(0, 28, 66, 0) 100%
+        ), linear-gradient(
+          to right,
+          rgba(0, 0, 0, 0.2) 0%,
+          rgba(255, 255, 255, 0) 10px,
+          rgba(255, 255, 255, 0) 10px,
+          rgba(0, 0, 0, 0.2) 100%
+        ), radial-gradient(
+          ellipse at 50% 85%,
+          rgba(64, 255, 0, 1) 0%,
+          rgba(29, 140, 96, 0.7) 70%,
+          rgba(0, 28, 66, 0.3) 100%
+        );
+
+        transition: background-image 0.5s, box-shadow 0.5s;
+
+        &:active {
+
+          // background-image: linear-gradient(
+          //   to bottom,
+          //   rgba(255, 255, 255, 0.5) 0%,
+          //   rgba(255, 255, 255, 0.4) 49%,
+          //   rgba(255, 255, 255, 0) 50%,
+          //   rgba(0, 0, 0, 0) 100%
+          // ), linear-gradient(
+          background-image: radial-gradient(
+            ellipse 70% 40% at 50% 20%,
+            rgba(255, 255, 255, 0.35) 0%,
+            rgba(255, 255, 255, 0.3) 39%,
+            rgba(255, 255, 255, 0) 40%,
+            rgba(0, 28, 66, 0) 100%
+          ), linear-gradient(
+            to right,
+            rgba(0, 0, 0, 0.2) 0%,
+            rgba(255, 255, 255, 0) 10px,
+            rgba(255, 255, 255, 0) 10px,
+            rgba(0, 0, 0, 0.2) 100%
+          ), radial-gradient(
+            ellipse at 50% 85%,
+            rgba(64, 255, 0, 1) 0%,
+            rgba(29, 140, 96, 0.7) 30%,
+            rgba(0, 28, 66, 0.3) 100%
+          );
+          transition: background-image 0s;
+        }
+      }
+    }
+
+
+    
+    label {
+
+      font-size: 1.2em;
+      // color: #a1bdce;
+      color: black;
+      // margin: 0px 1em;
+      padding: 0px 1em;
+    }
+  }
+}

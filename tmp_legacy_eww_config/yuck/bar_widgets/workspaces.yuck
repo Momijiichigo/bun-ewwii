@@ -1,0 +1,16 @@
+(defwidget workspaces [screen]
+  (box
+    :class "works"
+    :orientation "h"
+    :spacing 5
+    :space-evenly false
+    (for entry in "${wspaces[screen]}"
+      (button
+        :class "workspace-dot ${entry == current_workspace ? 'active' : ''}"
+        :onclick 
+          "hyprctl dispatch 'hl.dsp.focus({ workspace = ${entry} })'"
+        "${meta_pressed ? entry : " "}"
+      )
+    )
+  )
+)

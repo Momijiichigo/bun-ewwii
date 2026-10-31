@@ -1,0 +1,551 @@
+use anyhow::{Context, Result};
+use clap::{Parser, Subcommand};
+use serde::{Deserialize, Serialize};
+
+use crate::{
+    app,
+    daemon_response::{self, DaemonResponse, DaemonResponseSender},
+    dynval::DynVal,
+    window::{coords::Coords, monitor::MonitorIdentifier, window_geometry::AnchorPoint},
+};
+
+use std::collections::HashMap;
+
+/// Struct that gets generated from `RawOpt`.
+#[derive(Debug, Serialize, Deserialize, PartialEq)]
+pub struct Opt {
+    pub force_wayland: bool,
+    pub log_debug: bool,
+    pub show_logs: bool,
+    pub restart: bool,
+    pub config_path: Option<std::path::PathBuf>,
+    pub action: Action,
+    pub no_daemonize: bool,
+}
+
+#[derive(Parser, Debug, Serialize, Deserialize, PartialEq)]
+#[clap(author = "Byson94")]
+#[clap(version, about)]
+pub(super) struct RawOpt {
+    /// Write out debug logs. (To read the logs, run `ewwii logs`).
+    #[arg(long = "debug", global = true)]
+    log_debug: bool,
+
+    /// Force ewwii to use wayland. This is a no-op if ewwii was compiled without wayland support.
+    #[arg(long = "force-wayland", global = true)]
+    force_wayland: bool,
+
+    /// override path to configuration directory (directory that contains
+    /// ewwii.ts or ewwii.js, plus ewwii.(s)css)
+    #[arg(short, long, global = true)]
+    config: Option<std::path::PathBuf>,
+
+    /// Watch the log output after executing the command
+    #[arg(long = "logs", global = true)]
+    show_logs: bool,
+
+    /// Avoid daemonizing ewwii.
+    #[arg(long = "no-daemonize", global = true)]
+    no_daemonize: bool,
+
+    /// Restart the daemon completely before running the command
+    #[arg(long = "restart", global = true)]
+    restart: bool,
+
+    #[command(subcommand)]
+    action: Action,
+}
+
+#[derive(Subcommand, Debug, Serialize, Deserialize, PartialEq)]
+pub enum Action {
+    /// Generate a shell completion script
+    ShellCompletions {
+        #[arg(short, long)]
+        #[serde(with = "serde_shell")]
+        shell: clap_complete::shells::Shell,
+    },
+
+    /// Start the Ewwii daemon.
+    #[command(name = "daemon", alias = "d")]
+    Daemon,
+
+    #[command(flatten)]
+    ClientOnly(ActionClientOnly),
+
+    #[command(flatten)]
+    WithServer(ActionWithServer),
+}
+
+#[derive(Subcommand, Debug, Serialize, Deserialize, PartialEq, Eq)]
+pub enum ActionClientOnly {
+    /// Print and watch the ewwii logs
+    #[command(name = "logs")]
+    Logs,
+
+    /// Print the plugin version
+    #[command(name = "plugin-version")]
+    GetPluginVersion,
+}
+
+#[derive(Subcommand, Debug, Serialize, Deserialize, PartialEq)]
+pub enum ActionWithServer {
+    /// Ping the ewwii server, checking if it is reachable.
+    #[clap(name = "ping")]
+    Ping,
+
+    /// Open the GTK debugger
+    #[command(name = "inspector", alias = "debugger")]
+    OpenInspector,
+
+    /// Open a window
+    #[clap(name = "open", alias = "o")]
+    OpenWindow {
+        /// Name of the window you want to open.
+        window_name: String,
+
+        // The id of the window instance
+        #[arg(long)]
+        id: Option<String>,
+
+        /// The identifier of the monitor the window should open on
+        #[arg(long)]
+        screen: Option<MonitorIdentifier>,
+
+        /// The position of the window, where it should open. (i.e.: 200x100)
+        #[arg(short, long)]
+        pos: Option<Coords>,
+
+        /// The size of the window to open (i.e.: 200x100)
+        #[arg(short, long)]
+        size: Option<Coords>,
+
+        /// Sidepoint of the window, formatted like "top right"
+        #[arg(short, long)]
+        anchor: Option<AnchorPoint>,
+
+        /// If the window is already open, close it instead
+        #[arg(long = "toggle")]
+        should_toggle: bool,
+
+        /// Automatically close the window after a specified amount of time, i.e.: 1s
+        #[arg(long, value_parser=parse_duration)]
+        duration: Option<std::time::Duration>,
+    },
+
+    /// Open multiple windows at once.
+    #[command(name = "open-many")]
+    OpenMany {
+        /// List the windows to open, optionally including their id, i.e.: `--window "window_name:window_id"`
+        #[arg(value_parser = parse_window_config_and_id)]
+        windows: Vec<(String, String)>,
+
+        /// Define a variable for the window, i.e.: `--arg "window_id:var_name=value"`
+        #[arg(long = "arg", value_parser = parse_window_id_args)]
+        args: Vec<(String, String, String)>,
+
+        /// If a window is already open, close it instead
+        #[arg(long = "toggle")]
+        should_toggle: bool,
+    },
+
+    /// Close the given windows
+    #[command(name = "close", alias = "c")]
+    CloseWindows { windows: Vec<String> },
+
+    /// Reload the configuration
+    #[command(name = "reload", alias = "r")]
+    Reload,
+
+    /// Hot reload the configuration
+    #[command(name = "hotreload", alias = "hr")]
+    HotReload,
+
+    /// Kill the ewwii daemon
+    #[command(name = "kill", alias = "k")]
+    KillServer,
+
+    /// Close all windows, without killing the daemon
+    #[command(name = "close-all", alias = "ca")]
+    CloseAll,
+
+    /// Prints all the variables in the registery
+    #[command(name = "state")]
+    ShowState,
+    /// List the names of active windows
+    #[command(name = "list-windows")]
+    ListWindows,
+
+    /// Show active window IDs, formatted linewise `<window_id>: <window_name>`
+    #[command(name = "active-windows")]
+    ListActiveWindows,
+
+    /// List all active plugins
+    #[command(name = "list-plugins")]
+    ListPlugins,
+
+    /// Print out the widget structure as seen by ewwii
+    ///
+    /// This may be useful if you are facing issues with how ewwii is interpreting your configuration,
+    /// and to provide additional context to the ewwii developers if you are filing a bug.
+    #[command(name = "debug")]
+    ShowDebug,
+    // /// Print out the scope graph structure in graphviz dot format.
+    // #[command(name = "graph")]
+    // ShowGraph,
+    /// Control widgets through CLI
+    #[command(name = "widget-control", alias = "wc")]
+    WidgetControl {
+        #[command(subcommand)]
+        command: WidgetControlCommand,
+
+        #[arg(long = "no-wait")]
+        no_wait: bool,
+    },
+
+    /// Update the value of a variable, in a running ewwii instance
+    #[command(name = "update", alias = "u")]
+    Update {
+        /// Format: foo="val1" baz="val2"
+        #[arg(required = true, value_parser = parse_inject_var_map)]
+        mappings: HashMap<String, String>,
+    },
+}
+
+/// Subcommands for widget control
+#[derive(Subcommand, Debug, Serialize, Deserialize, PartialEq)]
+pub enum WidgetControlCommand {
+    /// Perform an action on a widget
+    Action {
+        /// The widget action to perform
+        #[command(subcommand)]
+        action: WidgetAction,
+    },
+
+    /// Remove widget by name
+    Remove {
+        /// Names of the widgets to remove
+        names: Vec<String>,
+
+        /// Window instance id (needed when the same window is open multiple times)
+        #[arg(long = "instance", short = 'i')]
+        instance: Option<String>,
+    },
+
+    /// Get a property value of a widget by name
+    PropertyGet {
+        /// Name of the property
+        property: String,
+
+        /// Name of the widget to get the property of
+        #[arg(long = "widget", short = 'w')]
+        widget_name: String,
+
+        /// Window instance id (needed when the same window is open multiple times)
+        #[arg(long = "instance", short = 'i')]
+        instance: Option<String>,
+    },
+
+    /// Update properties of a widget by name
+    PropertyUpdate {
+        /// Properties and its value
+        ///
+        /// Format: value="val1" widget_name="val2"
+        #[arg(value_parser = parse_inject_var_map)]
+        property_and_value: HashMap<String, String>,
+
+        /// Name of the widget to update the property of
+        #[arg(long = "widget", short = 'w')]
+        widget_name: String,
+
+        /// Window instance id (needed when the same window is open multiple times)
+        #[arg(long = "instance", short = 'i')]
+        instance: Option<String>,
+    },
+
+    /// Add a class to a widget with given name
+    AddClass {
+        /// The class to add to the widget
+        class: String,
+
+        /// Name of the widget to add class to
+        #[arg(long = "widget", short = 'w')]
+        widget_name: String,
+
+        /// Window instance id (needed when the same window is open multiple times)
+        #[arg(long = "instance", short = 'i')]
+        instance: Option<String>,
+    },
+
+    /// Remove a class to a widget with given name
+    RemoveClass {
+        /// The class to remove from the widget
+        class: String,
+
+        /// Name of the widget to remove class from
+        #[arg(long = "widget", short = 'w')]
+        widget_name: String,
+
+        /// Window instance id (needed when the same window is open multiple times)
+        #[arg(long = "instance", short = 'i')]
+        instance: Option<String>,
+    },
+}
+
+/// Perform an action on a widget
+#[derive(Subcommand, Debug, Serialize, Deserialize, PartialEq)]
+pub enum WidgetAction {
+    /// Scroll a widget to a value
+    Scroll {
+        /// Widget to scroll
+        widget: String,
+        /// Value to scroll to (0 top, 1 bottom)
+        value: f64,
+        /// Window instance id
+        #[arg(long = "instance", short = 'i')]
+        instance: Option<String>,
+    },
+    /// Focus a  widget
+    Focus {
+        /// Widget to focus
+        widget: String,
+        /// Window instance id
+        #[arg(long = "instance", short = 'i')]
+        instance: Option<String>,
+    },
+}
+
+impl Opt {
+    pub fn from_env() -> Self {
+        let raw: RawOpt = RawOpt::parse();
+        raw.into()
+    }
+}
+
+impl From<RawOpt> for Opt {
+    fn from(other: RawOpt) -> Self {
+        let RawOpt {
+            log_debug,
+            force_wayland,
+            config,
+            show_logs,
+            no_daemonize,
+            restart,
+            action,
+        } = other;
+        Opt {
+            log_debug,
+            force_wayland,
+            show_logs,
+            restart,
+            config_path: config,
+            action,
+            no_daemonize,
+        }
+    }
+}
+
+impl ActionWithServer {
+    pub fn can_start_daemon(&self) -> bool {
+        matches!(
+            self,
+            ActionWithServer::OpenWindow { .. } | ActionWithServer::OpenMany { .. }
+        )
+    }
+
+    pub fn into_daemon_command(
+        self,
+    ) -> (
+        app::DaemonCommand,
+        Option<daemon_response::DaemonResponseReceiver>,
+    ) {
+        let command = match self {
+            ActionWithServer::WidgetControl { command, no_wait } => {
+                return with_response_channel(|sender| app::DaemonCommand::WidgetControl {
+                    command,
+                    no_wait,
+                    sender,
+                })
+            }
+            ActionWithServer::Update { mappings } => {
+                return with_response_channel(|sender| app::DaemonCommand::Update {
+                    mappings,
+                    sender,
+                })
+            }
+            ActionWithServer::OpenInspector => app::DaemonCommand::OpenInspector,
+
+            ActionWithServer::KillServer => app::DaemonCommand::KillServer,
+            ActionWithServer::CloseAll => app::DaemonCommand::CloseAll,
+            ActionWithServer::Ping => {
+                let (send, recv) = tokio::sync::mpsc::unbounded_channel();
+                let _ = send.send(DaemonResponse::Success("pong".to_owned()));
+                return (app::DaemonCommand::NoOp, Some(recv));
+            }
+            // ActionWithServer::OpenMany { windows, should_toggle } => {
+            //     return with_response_channel(|sender| app::DaemonCommand::OpenMany { windows, should_toggle, sender });
+            // }
+            ActionWithServer::OpenWindow {
+                window_name,
+                id,
+                pos,
+                size,
+                screen,
+                anchor,
+                should_toggle,
+                duration,
+            } => {
+                return with_response_channel(|sender| app::DaemonCommand::OpenWindow {
+                    window_name,
+                    instance_id: id,
+                    pos,
+                    size,
+                    anchor,
+                    screen,
+                    should_toggle,
+                    duration,
+                    sender,
+                    // args,
+                });
+            }
+            ActionWithServer::OpenMany {
+                windows,
+                args,
+                should_toggle,
+            } => {
+                return with_response_channel(|sender| app::DaemonCommand::OpenMany {
+                    windows,
+                    args,
+                    should_toggle,
+                    sender,
+                });
+            }
+            ActionWithServer::CloseWindows { windows } => {
+                return with_response_channel(|sender| app::DaemonCommand::CloseWindows {
+                    windows,
+                    auto_reopen: false,
+                    sender,
+                });
+            }
+            ActionWithServer::Reload => {
+                return with_response_channel(app::DaemonCommand::ReloadConfigAndCss)
+            }
+            ActionWithServer::HotReload => {
+                return with_response_channel(app::DaemonCommand::HotReloadConfig)
+            }
+            ActionWithServer::ShowState => {
+                return with_response_channel(app::DaemonCommand::ShowState)
+            }
+            ActionWithServer::ListWindows => {
+                return with_response_channel(app::DaemonCommand::ListWindows)
+            }
+            ActionWithServer::ListActiveWindows => {
+                return with_response_channel(app::DaemonCommand::ListActiveWindows)
+            }
+            ActionWithServer::ListPlugins => {
+                return with_response_channel(app::DaemonCommand::ListPlugins)
+            }
+            ActionWithServer::ShowDebug => {
+                return with_response_channel(app::DaemonCommand::PrintDebug)
+            }
+        };
+        (command, None)
+    }
+}
+
+fn with_response_channel<O, F>(
+    f: F,
+) -> (
+    O,
+    Option<tokio::sync::mpsc::UnboundedReceiver<DaemonResponse>>,
+)
+where
+    F: FnOnce(DaemonResponseSender) -> O,
+{
+    let (sender, recv) = daemon_response::create_pair();
+    (f(sender), Some(recv))
+}
+
+fn parse_duration(s: &str) -> Result<std::time::Duration, crate::dynval::ConversionError> {
+    DynVal::from_string(s.to_owned()).as_duration()
+}
+
+mod serde_shell {
+    use std::str::FromStr as _;
+
+    use clap_complete::Shell;
+    use serde::{Deserialize as _, Deserializer, Serialize as _, Serializer};
+
+    pub fn serialize<S: Serializer>(shell: &Shell, serializer: S) -> Result<S::Ok, S::Error> {
+        shell.to_string().serialize(serializer)
+    }
+
+    pub fn deserialize<'de, D: Deserializer<'de>>(deserializer: D) -> Result<Shell, D::Error> {
+        let s = String::deserialize(deserializer)?;
+        Shell::from_str(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+/// Parse a window-name:window-id pair of the form `name:id` or `name` into a tuple of `(name, id)`.
+fn parse_window_config_and_id(s: &str) -> Result<(String, String)> {
+    let (name, id) = s.split_once(':').unwrap_or((s, s));
+
+    Ok((name.to_string(), id.to_string()))
+}
+
+/// Parse a window-id specific variable value declaration with the syntax `window-id:variable_name="new_value"`
+/// into a tuple of `(id, variable_name, new_value)`.
+fn parse_window_id_args(s: &str) -> Result<(String, String, String)> {
+    // Parse the = first so we know if an id has not been given
+    let (name, value) = s.split_once('=').with_context(|| {
+        format!(
+            "arguments must be in the shape `variable_name=\"new_value\"`, but got: {}",
+            s
+        )
+    })?;
+
+    let (id, var_name) = name.split_once(':').unwrap_or(("", name));
+
+    Ok((id.to_string(), var_name.to_string(), value.to_string()))
+}
+
+fn parse_inject_var_map(s: &str) -> Result<HashMap<String, String>, String> {
+    let mut map = HashMap::new();
+    let mut chars = s.chars().peekable();
+    let mut key = String::new();
+    let mut val = String::new();
+    let mut in_key = true;
+    let mut in_quotes = false;
+
+    while let Some(&c) = chars.peek() {
+        match c {
+            '"' => {
+                in_quotes = !in_quotes;
+                chars.next();
+            }
+            '=' if in_key => {
+                in_key = false;
+                chars.next();
+            }
+            ',' if !in_key && !in_quotes => {
+                map.insert(key.trim().to_string(), val.trim().to_string());
+                key.clear();
+                val.clear();
+                in_key = true;
+                chars.next();
+            }
+            _ => {
+                if in_key {
+                    key.push(c);
+                } else {
+                    val.push(c);
+                }
+                chars.next();
+            }
+        }
+    }
+
+    if !key.is_empty() {
+        map.insert(key.trim().to_string(), val.trim().to_string());
+    }
+    Ok(map)
+}
