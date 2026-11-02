@@ -95,7 +95,8 @@ is involved.
 ## What works
 
 - Per-monitor workspaces, from `wspaces` (`[[ws...], [ws...], ...]` indexed by
-  monitor/screen).
+  monitor/screen). Workspace-list changes use `handle.edit()` and update the
+  bar in place; the window is not closed/reopened.
 - Active workspace highlighting and click-to-focus.
 - Current music cover/title and play/pause/previous/next controls (revealed on
   hover).
@@ -106,8 +107,10 @@ is involved.
 - Notification icon via `swaync-client --subscribe`.
 - Clock with date/weekday/hour/minute and seconds scale.
 
-`wspaces`, `current_workspace`, `dont_sleep` and `music_reveal` are ewwii
-variables, so they can also be changed with:
+`wspaces`, `current_workspace`, `dont_sleep` and `music_reveal` are typed ewwii
+variables. JSON values (`wspaces`) are parsed automatically by
+`Widgets.variable<T>()`; no `JSON.parse` is needed. They can also be changed
+with:
 
 ```sh
 ewwii update 'dont_sleep=true'

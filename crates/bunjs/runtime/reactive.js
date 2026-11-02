@@ -35,11 +35,36 @@ export function toVariableString(value) {
 }
 
 /**
- * A string value shared with ewwii's variable store.
+ * Convert an ewwii variable string back to the type described by `initial`.
+ *
+ * Strings are kept as-is, so `variable<string>("name", "42")` still produces
+ * `"42"` rather than the number `42`. For non-string initial values the string
+ * is parsed as JSON; if that fails, the raw string is returned.
+ *
+ * @template T
+ * @param {string} value
+ * @param {T} [initial]
+ * @returns {T}
+ */
+export function fromVariableString(value, initial) {
+    if (typeof initial === "string" || initial === undefined) {
+        return /** @type {T} */ (value);
+    }
+    try {
+        return /** @type {T} */ (JSON.parse(value));
+    } catch {
+        return /** @type {T} */ (value);
+    }
+}
+
+/**
+ * A typed value shared with ewwii's variable store.
  *
  * Values changed with `ewwii update foo=bar` (or by another process using the
  * same ewwii daemon) are delivered to `on_change` listeners. Calling `.set()`
  * updates the same store and broadcasts to all other listeners.
+ *
+ * @template T
  */
 export class ReactiveVariable {
     /**
@@ -47,7 +72,7 @@ export class ReactiveVariable {
      * directly.
      *
      * @param {string} name
-     * @param {unknown} [initial] If omitted, an existing value is preserved.
+     * @param {T} [initial] If omitted, an existing value is preserved.
      */
     constructor(name, initial) {
         if (typeof name !== "string" || name.length === 0) {
@@ -55,30 +80,32 @@ export class ReactiveVariable {
         }
 
         this.name = name;
+        this._initial = initial;
+        this._listeners = new Map();
         this._entry = runtime().registerVariable(
             name,
             initial === undefined || initial === null ? null : toVariableString(initial),
         );
     }
 
-    /** Current value as a string. Assignments are equivalent to `.set()`. */
+    /** Current value. Assignments are equivalent to `.set()`. */
     get value() {
-        return this._entry.value;
+        return this._parse(this._entry.value);
     }
 
     set value(value) {
         this.set(value);
     }
 
-    /** Current value as a string. */
+    /** Current value. */
     get() {
-        return this._entry.value;
+        return this._parse(this._entry.value);
     }
 
     /**
      * Set the value and broadcast it through ewwii's variable store.
      *
-     * @param {unknown} value
+     * @param {T} value
      * @returns {this}
      */
     set(value) {
@@ -100,11 +127,21 @@ export class ReactiveVariable {
     /**
      * Run a listener whenever the value changes.
      *
-     * @param {(value: string) => void} listener
+     * @param {(value: T) => void} listener
      * @returns {() => void} unsubscribe function
      */
     on_change(listener) {
-        return runtime().subscribeVariable(this.name, listener);
+        if (typeof listener !== "function") {
+            throw new TypeError("on_change() expects a function");
+        }
+
+        const wrapped = (raw) => listener(this._parse(raw));
+        this._listeners.set(listener, wrapped);
+        const unsubscribe = runtime().subscribeVariable(this.name, wrapped);
+        return () => {
+            this._listeners.delete(listener);
+            unsubscribe();
+        };
     }
 
     /** Alias of `on_change`. */
@@ -117,7 +154,7 @@ export class ReactiveVariable {
      * `"update"`, `"value"`.
      *
      * @param {"change" | "update" | "value"} event
-     * @param {(value: string) => void} listener
+     * @param {(value: T) => void} listener
      * @returns {() => void} unsubscribe function
      */
     on(event, listener) {
@@ -130,18 +167,22 @@ export class ReactiveVariable {
     /**
      * Remove a listener.
      *
-     * @param {(value: string) => void} listener
+     * @param {(value: T) => void} listener
      * @returns {this}
      */
     off_change(listener) {
-        runtime().unsubscribeVariable(this.name, listener);
+        const wrapped = this._listeners.get(listener);
+        if (wrapped) {
+            this._listeners.delete(listener);
+            runtime().unsubscribeVariable(this.name, wrapped);
+        }
         return this;
     }
 
     /**
      * Run a listener once for the next change.
      *
-     * @param {(value: string) => void} listener
+     * @param {(value: T) => void} listener
      * @returns {() => void} unsubscribe function
      */
     once_change(listener) {
@@ -170,6 +211,11 @@ export class ReactiveVariable {
         });
     }
 
+    /** @param {string} raw */
+    _parse(raw) {
+        return fromVariableString(raw, this._initial);
+    }
+
     toString() {
         return this._entry.value;
     }
@@ -180,10 +226,12 @@ export class ReactiveVariable {
 }
 
 /**
- * Create (or get) a variable backed by ewwii's variable store.
+ * Create (or get) a typed variable backed by ewwii's variable store.
  *
+ * @template T
  * @param {string} name
- * @param {unknown} [initial]
+ * @param {T} [initial]
+ * @returns {ReactiveVariable<T>}
  */
 export function variable(name, initial) {
     return new ReactiveVariable(name, initial);

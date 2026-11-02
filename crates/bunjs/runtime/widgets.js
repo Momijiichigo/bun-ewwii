@@ -48,7 +48,7 @@ function scheduleStructural(parent) {
         return;
     }
     if (parent.__instanceId) {
-        runtime().scheduleInstanceSync(parent.__instanceId);
+        runtime().scheduleInstanceStructural(parent.__instanceId, parent.props.widget_name);
     } else {
         runtime().scheduleSync();
     }
@@ -148,6 +148,31 @@ export class Widget {
                     this.__instanceId ?? null,
                 );
             }
+        }
+        return this;
+    }
+
+    /**
+     * Run several structural changes as one transaction.
+     *
+     * The callback is synchronous. Structural operations inside it are
+     * coalesced, and mounted instances receive one host update per affected
+     * container when the transaction ends.
+     *
+     * @param {(widget: Widget) => void} callback
+     * @returns {this}
+     */
+    edit(callback) {
+        if (typeof callback !== "function") {
+            throw new TypeError("edit() expects a function");
+        }
+
+        const rt = runtime();
+        rt.beginStructuralEdit();
+        try {
+            callback(this);
+        } finally {
+            rt.endStructuralEdit();
         }
         return this;
     }

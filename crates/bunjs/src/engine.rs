@@ -13,14 +13,14 @@
 //!
 //! The sidecar owns the user's JS module and the live widget tree. ewwii owns
 //! the GTK widgets. Property/class updates are forwarded as normal ewwii IPC
-//! requests. Structural changes (adding/removing children) are applied to the
-//! sidecar's tree and then synchronized back to ewwii by asking the host to
-//! reload the configuration. ewwii re-runs the parse callback (which returns
-//! the live sidecar snapshot) and rebuilds the GTK widgets from it.
+//! requests. Instance-scoped structural changes (adding/removing children) are
+//! applied to the sidecar's tree and sent to the host as a `replace_children`
+//! operation, which updates the live GTK container without rebuilding the
+//! window.
 //!
-//! Property/class updates are instance-aware. Structural changes mutate the
-//! shared widget definition and trigger a full configuration reload, which is
-//! still the only generic way to rebuild GTK children from this interface.
+//! Definition-level structural changes still mutate the shared widget
+//! definition and trigger a full configuration reload, because they can affect
+//! every open instance.
 
 use crate::convert;
 use ewwii_plugin_api::shared_utils::ast::WidgetNode;
@@ -829,6 +829,35 @@ fn handle_op(shared: &Arc<Shared>, message: &Value) {
                 WidgetControlType::ReplaceTree {
                     instance: instance.to_string(),
                     tree: tree_json,
+                },
+            );
+        }
+        "replace_children" => {
+            let instance = message
+                .get("instance")
+                .and_then(Value::as_str)
+                .unwrap_or("");
+            let widget = message.get("widget").and_then(Value::as_str).unwrap_or("");
+            if instance.is_empty() || widget.is_empty() {
+                eprintln!("bun-ewwii: replace_children is missing an instance or widget name");
+                return;
+            }
+
+            let children = message.get("children").unwrap_or(&Value::Null);
+            let children_json = match serde_json::to_string(children) {
+                Ok(json) => json,
+                Err(err) => {
+                    eprintln!("bun-ewwii: failed to serialize widget children: {err}");
+                    return;
+                }
+            };
+
+            ipc(
+                shared.host.clone(),
+                WidgetControlType::ReplaceChildren {
+                    instance: instance.to_string(),
+                    widget: widget.to_string(),
+                    children: children_json,
                 },
             );
         }

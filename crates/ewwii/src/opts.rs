@@ -510,42 +510,92 @@ fn parse_window_id_args(s: &str) -> Result<(String, String, String)> {
 
 fn parse_inject_var_map(s: &str) -> Result<HashMap<String, String>, String> {
     let mut map = HashMap::new();
-    let mut chars = s.chars().peekable();
-    let mut key = String::new();
-    let mut val = String::new();
-    let mut in_key = true;
+    let mut start = 0;
     let mut in_quotes = false;
+    let mut escaped = false;
+    let mut depth = 0usize;
 
-    while let Some(&c) = chars.peek() {
-        match c {
-            '"' => {
-                in_quotes = !in_quotes;
-                chars.next();
+    let mut push_mapping = |segment: &str| -> Result<(), String> {
+        let segment = segment.trim();
+        if segment.is_empty() {
+            return Ok(());
+        }
+
+        let (key, value) = segment.split_once('=').ok_or_else(|| {
+            format!("arguments must be in the shape `variable_name=value`, but got: {segment}")
+        })?;
+        let key = unquote_mapping_part(key);
+        let value = unquote_mapping_part(value);
+        if key.is_empty() {
+            return Err(format!("variable name cannot be empty in: {segment}"));
+        }
+        map.insert(key, value);
+        Ok(())
+    };
+
+    for (index, character) in s.char_indices() {
+        if in_quotes {
+            if escaped {
+                escaped = false;
+            } else if character == '\\' {
+                escaped = true;
+            } else if character == '"' {
+                in_quotes = false;
             }
-            '=' if in_key => {
-                in_key = false;
-                chars.next();
+            continue;
+        }
+
+        match character {
+            '"' => in_quotes = true,
+            '[' | '{' => depth += 1,
+            ']' | '}' => depth = depth.saturating_sub(1),
+            ',' if depth == 0 => {
+                push_mapping(&s[start..index])?;
+                start = index + character.len_utf8();
             }
-            ',' if !in_key && !in_quotes => {
-                map.insert(key.trim().to_string(), val.trim().to_string());
-                key.clear();
-                val.clear();
-                in_key = true;
-                chars.next();
-            }
-            _ => {
-                if in_key {
-                    key.push(c);
-                } else {
-                    val.push(c);
-                }
-                chars.next();
-            }
+            _ => {}
         }
     }
 
-    if !key.is_empty() {
-        map.insert(key.trim().to_string(), val.trim().to_string());
+    if in_quotes {
+        return Err("unterminated quote in variable mapping".to_string());
     }
+
+    push_mapping(&s[start..])?;
     Ok(map)
+}
+
+fn unquote_mapping_part(value: &str) -> String {
+    let value = value.trim();
+    if value.len() >= 2 && value.starts_with('"') && value.ends_with('"') {
+        value[1..value.len() - 1].to_string()
+    } else {
+        value.to_string()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_inject_var_map;
+
+    #[test]
+    fn parses_simple_variable_mappings() {
+        let map = parse_inject_var_map("volume=42, name=desk").unwrap();
+        assert_eq!(map.get("volume"), Some(&"42".to_string()));
+        assert_eq!(map.get("name"), Some(&"desk".to_string()));
+    }
+
+    #[test]
+    fn keeps_json_commas_and_quotes() {
+        let map = parse_inject_var_map(r#"wspaces=[[1,2],[3]],obj={"a":1,"b":"x,y"}"#).unwrap();
+        assert_eq!(map.get("wspaces"), Some(&"[[1,2],[3]]".to_string()));
+        assert_eq!(map.get("obj"), Some(&r#"{"a":1,"b":"x,y"}"#.to_string()));
+    }
+
+    #[test]
+    fn strips_outer_quotes_from_values() {
+        let map = parse_inject_var_map(r#"message="hello, world",volume=42"#).unwrap();
+        assert_eq!(map.get("message"), Some(&"hello, world".to_string()));
+        assert_eq!(map.get("volume"), Some(&"42".to_string()));
+    }
 }

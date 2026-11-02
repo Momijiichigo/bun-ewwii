@@ -27,6 +27,13 @@ pub fn convert_window(value: &Value) -> Result<WidgetNode, String> {
     to_node(window)
 }
 
+/// Convert a JSON array of child widget objects into ewwii widget nodes.
+pub fn convert_children(value: &Value) -> Result<Vec<WidgetNode>, String> {
+    let children: Vec<WidgetData> = serde_json::from_value(value.clone())
+        .map_err(|err| format!("Invalid child widget list from Bun runtime: {err}"))?;
+    children.into_iter().map(to_node).collect()
+}
+
 /// Convert the runtime's `tree` array (a list of window definitions) into an
 /// ewwii widget tree.
 pub fn convert_tree(value: &Value) -> Result<WidgetNode, String> {
@@ -244,5 +251,18 @@ mod tests {
     fn rejects_window_without_name() {
         let tree = json!([{ "type": "Window", "props": {}, "children": [] }]);
         assert!(convert_tree(&tree).is_err());
+    }
+
+    #[test]
+    fn converts_child_widget_list() {
+        let children = json!([
+            { "type": "Label", "props": { "text": "a", "widget_name": "a" } },
+            { "type": "Box", "props": { "widget_name": "box" }, "children": [] }
+        ]);
+
+        let nodes = convert_children(&children).expect("children should convert");
+        assert_eq!(nodes.len(), 2);
+        assert!(matches!(nodes[0], WidgetNode::Label { .. }));
+        assert!(matches!(nodes[1], WidgetNode::Box { .. }));
     }
 }

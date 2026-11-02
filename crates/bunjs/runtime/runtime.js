@@ -108,6 +108,8 @@ const runtime = {
     liveInstances: /** @type {Map<string, any>} */ (new Map()),
     instanceTrees: /** @type {Map<string, Widget>} */ (new Map()),
     instanceSyncScheduled: /** @type {Set<string>} */ (new Set()),
+    structuralEditDepth: 0,
+    dirtyInstanceParents: /** @type {Map<string, Set<string>>} */ (new Map()),
     afterRender: /** @type {((api: WidgetAPI) => unknown) | null} */ (null),
     afterRenderStarted: false,
 
@@ -169,6 +171,8 @@ const runtime = {
     handleWindowClose(instanceId) {
         this.liveInstances.delete(instanceId);
         this.instanceTrees.delete(instanceId);
+        this.dirtyInstanceParents.delete(instanceId);
+        this.instanceSyncScheduled.delete(instanceId);
     },
 
     /** @param {Widget} widget */
@@ -293,9 +297,55 @@ const runtime = {
         return null;
     },
 
+    /** Start a structural transaction. */
+    beginStructuralEdit() {
+        this.structuralEditDepth += 1;
+    },
+
+    /** Finish a structural transaction and flush all dirty containers. */
+    endStructuralEdit() {
+        if (this.structuralEditDepth <= 0) {
+            throw new Error("endStructuralEdit() called without beginStructuralEdit()");
+        }
+        this.structuralEditDepth -= 1;
+        if (this.structuralEditDepth !== 0) {
+            return;
+        }
+        for (const instanceId of [...this.dirtyInstanceParents.keys()]) {
+            this.scheduleInstanceSync(instanceId);
+        }
+    },
+
+    /**
+     * Record a mounted container whose children changed.
+     *
+     * @param {string} instanceId
+     * @param {string} widgetName
+     */
+    scheduleInstanceStructural(instanceId, widgetName) {
+        if (!this.instanceTrees.has(instanceId)) {
+            return;
+        }
+
+        let dirty = this.dirtyInstanceParents.get(instanceId);
+        if (!dirty) {
+            dirty = new Set();
+            this.dirtyInstanceParents.set(instanceId, dirty);
+        }
+        dirty.add(String(widgetName));
+
+        if (this.structuralEditDepth === 0) {
+            this.scheduleInstanceSync(instanceId);
+        }
+    },
+
     /** @param {string} instanceId */
     scheduleInstanceSync(instanceId) {
-        if (!this.instanceTrees.has(instanceId) || this.instanceSyncScheduled.has(instanceId)) {
+        if (
+            !this.instanceTrees.has(instanceId) ||
+            !this.dirtyInstanceParents.has(instanceId) ||
+            this.instanceSyncScheduled.has(instanceId)
+        ) {
             return;
         }
 
@@ -303,26 +353,47 @@ const runtime = {
         queueMicrotask(() => {
             this.instanceSyncScheduled.delete(instanceId);
             const tree = this.instanceTrees.get(instanceId);
-            if (!tree) {
+            const dirty = this.dirtyInstanceParents.get(instanceId);
+            this.dirtyInstanceParents.delete(instanceId);
+            if (!tree || !dirty) {
                 return;
             }
 
-            try {
-                tree.validate();
-            } catch (error) {
+            const dirtyNodes = [...dirty]
+                .map((name) => [name, findInTree(tree, name)])
+                .filter(([, node]) => node);
+
+            for (const [widgetName, node] of dirtyNodes) {
+                // If a dirty ancestor is also being replaced, that update
+                // already contains this subtree. Sending both would make the
+                // second operation target a widget the first one removed.
+                const coveredByAncestor = dirtyNodes.some(
+                    ([otherName, otherNode]) =>
+                        otherName !== widgetName &&
+                        findInTree(otherNode, node.props.widget_name) === node,
+                );
+                if (coveredByAncestor) {
+                    continue;
+                }
+
+                try {
+                    node.validate();
+                } catch (error) {
+                    send({
+                        type: "error",
+                        error: `Refusing to synchronize an invalid widget subtree: ${formatError(error)}`,
+                    });
+                    continue;
+                }
+
                 send({
-                    type: "error",
-                    error: `Refusing to synchronize an invalid instance tree: ${formatError(error)}`,
+                    type: "op",
+                    op: "replace_children",
+                    instance: instanceId,
+                    widget: String(node.props.widget_name ?? widgetName),
+                    children: node.children.map((child) => child.toJSON()),
                 });
-                return;
             }
-
-            send({
-                type: "op",
-                op: "replace_tree",
-                instance: instanceId,
-                tree: tree.toJSON(),
-            });
         });
     },
 
@@ -498,6 +569,8 @@ const runtime = {
             // the (possibly changed) definition tree.
             this.instanceTrees.clear();
             this.liveInstances.clear();
+            this.dirtyInstanceParents.clear();
+            this.instanceSyncScheduled.clear();
             send({ type: "op", op: "reload" });
         });
     },
@@ -596,6 +669,22 @@ class LiveWidgetHandle {
         for (const className of classNames) {
             this.remove_class(className);
         }
+        return this;
+    }
+
+    /**
+     * Run several structural changes as one transaction.
+     *
+     * @param {(handle: LiveWidgetHandle) => void} callback
+     * @returns {this}
+     */
+    edit(callback) {
+        if (typeof callback !== "function") {
+            throw new TypeError("edit() expects a function");
+        }
+
+        const node = runtime.requireNode(this.widgetId, this.instanceId);
+        node.edit(() => callback(this));
         return this;
     }
 

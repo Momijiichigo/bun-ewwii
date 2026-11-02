@@ -750,9 +750,46 @@ impl<B: DisplayBackend> App<B> {
         }
     }
 
+    /// Replace the children of a live widget without rebuilding its window.
+    ///
+    /// This is used by the Bun runtime for incremental structural operations.
+    pub fn replace_instance_children(
+        &mut self,
+        instance_id: String,
+        widget_name: String,
+        children: Vec<WidgetNode>,
+    ) -> Result<()> {
+        let mut store = self
+            .widget_reg_store
+            .lock()
+            .map_err(|_| anyhow!("Failed to lock widget store"))?;
+        let registry = store
+            .get_mut(&instance_id)
+            .ok_or_else(|| anyhow!("Window instance '{}' is not open", instance_id))?;
+
+        let widget_id = registry
+            .get_widget_id_by_name(&widget_name)
+            .ok_or_else(|| {
+                anyhow!(
+                    "Widget '{}' not found in instance '{}'",
+                    widget_name,
+                    instance_id
+                )
+            })?;
+        let target = registry
+            .widgets
+            .get(&widget_id)
+            .ok_or_else(|| anyhow!("Widget '{}' registry entry is missing", widget_name))?
+            .widget()
+            .clone();
+
+        crate::widgets::widget_definitions::replace_widget_children(&target, &children, registry)
+    }
+
     /// Replace only one window instance's widget tree and rebuild that instance.
     ///
-    /// This is used by the Bun runtime for instance-scoped structural operations.
+    /// This is used for full-tree replacements. Incremental child changes use
+    /// [`Self::replace_instance_children`] and do not close the window.
     pub fn replace_instance_tree(&mut self, instance_id: String, tree: WidgetNode) -> Result<()> {
         if !self.instance_id_to_args.contains_key(&instance_id) {
             anyhow::bail!("Window instance '{}' is not open", instance_id);

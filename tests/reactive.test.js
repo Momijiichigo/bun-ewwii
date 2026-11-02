@@ -42,7 +42,7 @@ globalThis.__BUN_EWWII__ = {
     },
 };
 
-const { ReactiveVariable, variable, toVariableString } = await import("../crates/bunjs/runtime/reactive.js");
+const { ReactiveVariable, variable, toVariableString, fromVariableString } = await import("../crates/bunjs/runtime/reactive.js");
 
 beforeEach(() => {
     variables = new Map();
@@ -82,6 +82,46 @@ describe("reactive variables", () => {
 
         v.value = "next";
         expect(v.get()).toBe("next");
+    });
+
+    test("parses typed values from internal and external updates", () => {
+        const list = variable("list", []);
+        const seen = [];
+        list.on_change((value) => seen.push(value));
+
+        expect(list.value).toEqual([]);
+        list.set([["a", "b"]]);
+        expect(list.value).toEqual([["a", "b"]]);
+        expect(sent.at(-1)).toEqual({
+            op: "set_variable",
+            name: "list",
+            value: '[["a","b"]]',
+        });
+
+        globalThis.__BUN_EWWII__.emit("list", "[[1,2],[3]]");
+        expect(list.value).toEqual([
+            [1, 2],
+            [3],
+        ]);
+        expect(seen.at(-1)).toEqual([
+            [1, 2],
+            [3],
+        ]);
+
+        const number = variable("number", 0);
+        globalThis.__BUN_EWWII__.emit("number", "42");
+        expect(number.value).toBe(42);
+
+        const flag = variable("flag", false);
+        globalThis.__BUN_EWWII__.emit("flag", "true");
+        expect(flag.value).toBe(true);
+
+        const text = variable("text", "0");
+        globalThis.__BUN_EWWII__.emit("text", "42");
+        expect(text.value).toBe("42");
+
+        expect(fromVariableString("42", 0)).toBe(42);
+        expect(fromVariableString("42", "0")).toBe("42");
     });
 
     test("delivers external updates to listeners", () => {

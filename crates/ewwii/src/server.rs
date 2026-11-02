@@ -37,19 +37,6 @@ pub fn initialize_server<B: DisplayBackend>(
 
     log::info!("Loading paths: {}", paths);
 
-    // Built-in Bun config engine. It talks to the host through the same plugin
-    // request channel plugins use, but its callbacks are dispatched locally.
-    let (plugin_tx, mut plugin_rx) = tokio::sync::mpsc::channel(32);
-    plugin::PLUGIN_TX
-        .set(plugin_tx)
-        .expect("plugin tx already initialized");
-
-    let bun_host: Arc<dyn EwwiiAPI> = Arc::new(HostProxy::new("builtin.bunjs"));
-    let bun_engine = ewwii_bunjs::BunConfigEngine::new(bun_host);
-    EWWII_CONFIG_PARSER.with(|p| {
-        *p.borrow_mut() = Some(ConfigEngine::Bun(bun_engine));
-    });
-
     let ewwii_plugins = paths.get_plugin_paths();
     cleanup_log_dir(paths.get_log_dir())?;
 
@@ -60,6 +47,23 @@ pub fn initialize_server<B: DisplayBackend>(
             return Ok(ForkResult::Parent);
         }
     }
+
+    // Start threads only after daemonization has forked. In particular,
+    // `BunConfigEngine::new` starts the signal worker thread; a thread created
+    // before `fork()` does not exist in the child and would leave variable
+    // registrations and update subscriptions without a worker.
+    let (plugin_tx, mut plugin_rx) = tokio::sync::mpsc::channel(32);
+    plugin::PLUGIN_TX
+        .set(plugin_tx)
+        .expect("plugin tx already initialized");
+
+    // Built-in Bun config engine. It talks to the host through the same plugin
+    // request channel plugins use, but its callbacks are dispatched locally.
+    let bun_host: Arc<dyn EwwiiAPI> = Arc::new(HostProxy::new("builtin.bunjs"));
+    let bun_engine = ewwii_bunjs::BunConfigEngine::new(bun_host);
+    EWWII_CONFIG_PARSER.with(|p| {
+        *p.borrow_mut() = Some(ConfigEngine::Bun(bun_engine));
+    });
 
     println!(
         r#"

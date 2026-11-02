@@ -75,6 +75,25 @@ impl WidgetRegistry {
         false
     }
 
+    /// Remove registry entries for all GTK descendants of `root`.
+    ///
+    /// Used when a live container's children are replaced without rebuilding
+    /// the whole window. The root widget itself is kept.
+    pub fn remove_descendants_of(&mut self, root: &gtk4::Widget) {
+        let ids: Vec<u64> = self
+            .widgets
+            .iter()
+            .filter_map(|(&id, widget)| {
+                let candidate = widget.widget();
+                (candidate.as_ptr() != root.as_ptr() && candidate.is_ancestor(root)).then_some(id)
+            })
+            .collect();
+
+        for id in ids {
+            self.widgets.remove(&id);
+        }
+    }
+
     pub fn get_widget_id_by_name(&self, name: &str) -> Option<u64> {
         self.widgets
             .iter()
@@ -3167,6 +3186,159 @@ impl EwwiiWidget for AspectFrameWidget {
 }
 
 // === Widget Registration === //
+
+/// Build a list of child widgets into an existing registry.
+fn build_child_widgets(
+    children: &[WidgetNode],
+    widget_registry: &mut WidgetRegistry,
+) -> Result<Vec<gtk4::Widget>> {
+    children
+        .iter()
+        .map(|child| build_gtk_widget(&WidgetInput::BorrowedNode(child), widget_registry))
+        .collect()
+}
+
+fn require_at_most_one_child(target: &gtk4::Widget, count: usize) -> Result<()> {
+    if count > 1 {
+        bail!(
+            "Widget '{}' supports at most one child, but got {}",
+            target.widget_name(),
+            count
+        );
+    }
+    Ok(())
+}
+
+/// Replace the live children of an existing widget without rebuilding its
+/// containing window.
+///
+/// Only common container GTK types are supported. Leaf widgets and specialised
+/// containers with hidden extra children report an error.
+pub(crate) fn replace_widget_children(
+    target: &gtk4::Widget,
+    children: &[WidgetNode],
+    widget_registry: &mut WidgetRegistry,
+) -> Result<()> {
+    let supported = target.is::<gtk4::Box>()
+        || target.is::<gtk4::FlowBox>()
+        || target.is::<gtk4::Stack>()
+        || target.is::<gtk4::Overlay>()
+        || target.is::<gtk4::Expander>()
+        || target.is::<gtk4::Revealer>()
+        || target.is::<gtk4::ScrolledWindow>()
+        || target.is::<gtk4::AspectFrame>()
+        || target.is::<AnimationWidget>();
+    if !supported {
+        bail!(
+            "Widget '{}' does not support live child changes",
+            target.widget_name()
+        );
+    }
+
+    widget_registry.remove_descendants_of(target);
+
+    if let Some(container) = target.downcast_ref::<gtk4::Box>() {
+        while let Some(child) = container.first_child() {
+            container.remove(&child);
+        }
+        for child in build_child_widgets(children, widget_registry)? {
+            container.append(&child);
+        }
+        return Ok(());
+    }
+
+    if let Some(container) = target.downcast_ref::<gtk4::FlowBox>() {
+        container.remove_all();
+        for (index, child) in build_child_widgets(children, widget_registry)?
+            .iter()
+            .enumerate()
+        {
+            container.insert(child, index as i32);
+        }
+        return Ok(());
+    }
+
+    if let Some(container) = target.downcast_ref::<gtk4::Stack>() {
+        while let Some(child) = container.first_child() {
+            container.remove(&child);
+        }
+        for (index, child) in build_child_widgets(children, widget_registry)?
+            .iter()
+            .enumerate()
+        {
+            container.add_named(child, Some(&index.to_string()));
+        }
+        return Ok(());
+    }
+
+    if let Some(container) = target.downcast_ref::<gtk4::Overlay>() {
+        container.set_child(None::<&gtk4::Widget>);
+        while let Some(child) = container.first_child() {
+            container.remove_overlay(&child);
+        }
+        for (index, child) in build_child_widgets(children, widget_registry)?
+            .iter()
+            .enumerate()
+        {
+            if index == 0 {
+                container.set_child(Some(child));
+            } else {
+                container.add_overlay(child);
+            }
+        }
+        return Ok(());
+    }
+
+    if let Some(container) = target.downcast_ref::<gtk4::Expander>() {
+        require_at_most_one_child(target, children.len())?;
+        container.set_child(None::<&gtk4::Widget>);
+        if let Some(child) = build_child_widgets(children, widget_registry)?.first() {
+            container.set_child(Some(child));
+        }
+        return Ok(());
+    }
+
+    if let Some(container) = target.downcast_ref::<gtk4::Revealer>() {
+        require_at_most_one_child(target, children.len())?;
+        container.set_child(None::<&gtk4::Widget>);
+        if let Some(child) = build_child_widgets(children, widget_registry)?.first() {
+            container.set_child(Some(child));
+        }
+        return Ok(());
+    }
+
+    if let Some(container) = target.downcast_ref::<gtk4::ScrolledWindow>() {
+        require_at_most_one_child(target, children.len())?;
+        container.set_child(None::<&gtk4::Widget>);
+        if let Some(child) = build_child_widgets(children, widget_registry)?.first() {
+            container.set_child(Some(child));
+        }
+        return Ok(());
+    }
+
+    if let Some(container) = target.downcast_ref::<gtk4::AspectFrame>() {
+        require_at_most_one_child(target, children.len())?;
+        container.set_child(None::<&gtk4::Widget>);
+        if let Some(child) = build_child_widgets(children, widget_registry)?.first() {
+            container.set_child(Some(child));
+        }
+        return Ok(());
+    }
+
+    if let Some(container) = target.downcast_ref::<AnimationWidget>() {
+        require_at_most_one_child(target, children.len())?;
+        container.set_child(None::<&gtk4::Widget>);
+        if let Some(child) = build_child_widgets(children, widget_registry)?.first() {
+            container.set_child(Some(child));
+        }
+        return Ok(());
+    }
+
+    bail!(
+        "Widget '{}' does not support live child changes",
+        target.widget_name()
+    )
+}
 
 pub(super) fn build_gtk_box(
     props: &PropertyMap,

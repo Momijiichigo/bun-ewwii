@@ -188,13 +188,27 @@ insert_child(index, child)
 remove_child(childOrName)
 replace_children(children)
 clear_children()
+edit(callback)
 child_names()
 children()
 ```
 
-Property and class updates are applied live. Structural changes rebuild the
-affected window instance (or every instance for definition-level changes);
-expect a brief rebuild and make structural changes sparingly.
+Property and class updates are applied live. Instance-scoped structural changes
+now update the existing GTK container in place, without closing/reopening the
+window. Definition-level structural changes still trigger a config reload and
+recreate instances.
+
+Use `edit()` to group a sequence of structural operations into one host update:
+
+```js
+handle.edit((h) => {
+  h.clear_children();
+  h.append_child(first);
+  h.append_child(second);
+});
+```
+
+`edit()` is synchronous and coalesces changes per affected container.
 
 ## Multiple window instances / per-monitor bars
 
@@ -283,8 +297,8 @@ api.find("root", "bar_1").clear_children();
 ```
 
 - **Instance handle** (`on_mount`, `api.find(name, instanceId)`,
-  `win.forInstance(id)`): mutates only that instance's tree and rebuilds only
-  that instance.
+  `win.forInstance(id)`): mutates only that instance's tree and updates the
+  live GTK children in place.
 - **Definition handle** (`Widget.add_child` on the shared tree,
   `win.append_child`, `api.find(name)` where only one instance exists): mutates
   the shared window definition and reloads every instance.
@@ -312,28 +326,48 @@ Widgets.register(Widgets.Window("demo").add_child(label));
 
 `ewwii update` and `ewwii state` use the same global variable store:
 
-```js
+```ts
 import * as Widgets from "ewwii/widgets";
 // Or: import { variable } from "ewwii/reactive";
 
-const volume = Widgets.variable("volume", "0");
+const volume = Widgets.variable<number>("volume", 0);
+const wspaces = Widgets.variable<number[][]>("wspaces", []);
 
 volume.on_change((value) => {
+  // value is a number
   console.log("volume:", value);
 });
 
+wspaces.on_change((value) => {
+  // value is already parsed; no JSON.parse needed
+  console.log("workspaces:", value[0]);
+});
+
 volume.set(42);
-volume.value = "43";
+volume.value = 43;
 ```
 
 ```sh
 ewwii update 'volume=42'
+ewwii update 'wspaces=[[1,2],[3]]'
 ewwii state
 ```
 
-Values are strings. `.set()` updates locally and broadcasts; external updates
-arrive asynchronously. `variable(name)` without an initial value preserves an
-existing value. Values survive config reloads while the daemon runs.
+The CLI parser understands commas inside JSON arrays/objects and quoted values,
+so multiple mappings still work without splitting JSON values.
+
+The generic parameter controls decoding:
+
+- `variable<string>(name)` / `variable(name, "text")` keeps raw strings.
+- Non-string initial values (`number`, `boolean`, arrays, objects) are
+  serialized as JSON and parsed automatically on read and in `on_change`.
+- `variable<T>(name)` without an initial value preserves the existing value;
+  pass an initial value when you need non-string decoding.
+
+`.set()` updates locally and broadcasts; external updates arrive
+asynchronously. Make sure `ewwii update` targets the same daemon/config
+directory as the running bar, since each config directory has its own IPC
+socket. Values survive config reloads while the daemon runs.
 
 Bind a variable to a widget:
 
@@ -398,7 +432,13 @@ Existing compiled plugins must be rebuilt against API 2.0.0.
   Use `console.*`.
 - Do not `await` a long-running command at module top level; module evaluation
   blocks the initial parse. Start long work in `after_render`.
-- Structural changes rebuild windows. High-frequency child churn is expensive.
+- Instance-scoped structural changes update live containers; definition-level
+  structural changes still reload every instance.
+- Use `edit()` when performing several structural changes; it coalesces them
+  into one host update per affected container.
+- Live child replacement supports the common GTK containers (`Box`, `FlowBox`,
+  `Stack`, `Overlay`, `Expander`, `Revealer`, `Scroll`, `AspectFrame`, and
+  `Animation`). Other widgets report an error.
 - With multiple instances of a window, `api.find(name)` without an instance id
   fails as ambiguous. Use `on_mount` or pass an instance id.
 - Per-instance structural overrides live in memory. A config reload or daemon

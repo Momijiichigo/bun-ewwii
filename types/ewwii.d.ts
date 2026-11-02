@@ -57,10 +57,21 @@ interface Widget {
     set_property(key: string, value: unknown): this;
 
     /**
+     * Run several structural changes as one transaction.
+     *
+     * The callback runs synchronously. Structural operations inside it are
+     * coalesced; mounted instances receive one host update per affected
+     * container when the transaction ends.
+     *
+     * @returns The same widget for method chaining.
+     */
+    edit(callback: (widget: Widget) => void): this;
+
+    /**
      * Add a child widget at the end.
      *
-     * If the widget is already rendered, the GTK tree is synchronized after
-     * the current microtask (currently via a full window rebuild).
+     * If the widget is already rendered, the live GTK container is
+     * synchronized after the current microtask.
      *
      * @returns The same widget for method chaining.
      */
@@ -69,7 +80,7 @@ interface Widget {
     /**
      * Insert a child at a specific index.
      *
-     * The GTK tree is synchronized after the current microtask.
+     * The live GTK container is synchronized after the current microtask.
      *
      * @returns The same widget for method chaining.
      */
@@ -221,6 +232,16 @@ declare class LiveWidgetHandle {
      * @returns The same handle for method chaining.
      */
     remove_classes(...classNames: string[]): this;
+
+    /**
+     * Run several structural changes as one transaction.
+     *
+     * The callback runs synchronously. Changes are coalesced and applied to the
+     * live GTK tree when the transaction ends, without closing the window.
+     *
+     * @returns The same handle for method chaining.
+     */
+    edit(callback: (handle: LiveWidgetHandle) => void): this;
 
     /**
      * Append a child widget to this widget after it has been rendered.
@@ -430,18 +451,21 @@ declare module "ewwii/widgets" {
     export function register(widget: Widget): WindowHandle;
 
     /**
-     * Create or get a reactive variable backed by ewwii's variable store.
+     * Create or get a typed reactive variable backed by ewwii's variable store.
      *
      * This is a convenience re-export of `variable` from `ewwii/reactive`.
      *
+     * Non-string values are serialized as JSON and parsed automatically on
+     * reads and in `on_change` listeners.
+     *
      * @param name Variable name, as used by `ewwii update name=value`.
      * @param initial Optional initial value. If omitted, an existing value is
-     *   preserved.
+     *   preserved. Pass an initial value when using non-string `T`.
      */
-    export function variable(
+    export function variable<T = string>(
         name: string,
-        initial?: unknown,
-    ): import("ewwii/reactive").ReactiveVariable;
+        initial?: T,
+    ): import("ewwii/reactive").ReactiveVariable<T>;
 }
 
 declare module "ewwii/reactive" {
@@ -449,46 +473,55 @@ declare module "ewwii/reactive" {
     export function toVariableString(value: unknown): string;
 
     /**
-     * A reactive string variable synchronized with ewwii's variable store.
+     * Convert an ewwii variable string back to the type described by
+     * `initial`.
+     *
+     * String initial values are kept raw; non-string initial values are parsed
+     * as JSON, falling back to the raw string if parsing fails.
+     */
+    export function fromVariableString<T>(value: string, initial?: T): T;
+
+    /**
+     * A typed value synchronized with ewwii's variable store.
      *
      * `ewwii update name=value` and `.set()` both update the same value and
-     * notify `on_change` listeners.
+     * notify `on_change` listeners. JSON values are parsed automatically.
      */
-    export class ReactiveVariable {
-        constructor(name: string, initial?: unknown);
+    export class ReactiveVariable<T = string> {
+        constructor(name: string, initial?: T);
 
         /** Variable name. */
         readonly name: string;
 
         /** Current value. Assigning to this property calls `set()`. */
-        value: string;
+        value: T;
 
-        /** Current value as a string. */
-        get(): string;
+        /** Current value. */
+        get(): T;
 
         /** Update the value and broadcast it through ewwii. */
-        set(value: unknown): this;
+        set(value: T): this;
 
         /** Re-query the current value from ewwii's store. */
         refresh(): this;
 
         /** Run a listener whenever the value changes. */
-        on_change(listener: (value: string) => void): () => void;
+        on_change(listener: (value: T) => void): () => void;
 
         /** Alias of `on_change`. */
-        subscribe(listener: (value: string) => void): () => void;
+        subscribe(listener: (value: T) => void): () => void;
 
         /** Event-style listener registration (`change`, `update`, or `value`). */
         on(
             event: "change" | "update" | "value",
-            listener: (value: string) => void,
+            listener: (value: T) => void,
         ): () => void;
 
         /** Remove a listener. */
-        off_change(listener: (value: string) => void): this;
+        off_change(listener: (value: T) => void): this;
 
         /** Run a listener once for the next change. */
-        once_change(listener: (value: string) => void): () => void;
+        once_change(listener: (value: T) => void): () => void;
 
         /**
          * Keep a widget property in sync with this variable.
@@ -504,8 +537,11 @@ declare module "ewwii/reactive" {
         valueOf(): string;
     }
 
-    /** Create (or get) a variable backed by ewwii's variable store. */
-    export function variable(name: string, initial?: unknown): ReactiveVariable;
+    /** Create (or get) a typed variable backed by ewwii's variable store. */
+    export function variable<T = string>(
+        name: string,
+        initial?: T,
+    ): ReactiveVariable<T>;
 }
 
 declare module "ewwii/tools" {

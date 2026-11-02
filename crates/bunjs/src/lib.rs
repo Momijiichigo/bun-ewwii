@@ -76,6 +76,13 @@ pub fn parse_window_json(json: &str) -> Result<WidgetNode, String> {
     convert::convert_window(&value)
 }
 
+/// Parse a JSON array of child widgets without a Bun runtime.
+pub fn parse_children_json(json: &str) -> Result<Vec<WidgetNode>, String> {
+    let value: serde_json::Value =
+        serde_json::from_str(json).map_err(|err| format!("Invalid children JSON: {err}"))?;
+    convert::convert_children(&value)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

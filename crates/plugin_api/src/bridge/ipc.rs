@@ -58,6 +58,15 @@ pub enum WidgetControlType {
     },
     /// Replace the widget tree of one specific window instance.
     ReplaceTree { instance: String, tree: String },
+    /// Replace the children of one widget in a specific window instance.
+    ///
+    /// `children` is a JSON array of widget nodes. The host updates the live
+    /// GTK container without closing/reopening the window.
+    ReplaceChildren {
+        instance: String,
+        widget: String,
+        children: String,
+    },
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

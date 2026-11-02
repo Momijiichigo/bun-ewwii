@@ -90,12 +90,12 @@ interface SleepView {
 // Shared variables (also usable through `ewwii update name=value`)
 // ---------------------------------------------------------------------------
 
-const wspaces = Widgets.variable("wspaces", "[[], [], [], []]");
-const currentWorkspace = Widgets.variable("current_workspace", "1");
-const metaPressed = Widgets.variable("meta_pressed", "false");
+const wspaces = Widgets.variable<number[][]>("wspaces", [[], [], [], []]);
+const currentWorkspace = Widgets.variable<number>("current_workspace", 1);
+const metaPressed = Widgets.variable<boolean>("meta_pressed", false);
 
-const dontSleep = Widgets.variable("dont_sleep", "false");
-const musicReveal = Widgets.variable("music_reveal", "false");
+const dontSleep = Widgets.variable<boolean>("dont_sleep", false);
+const musicReveal = Widgets.variable<boolean>("music_reveal", false);
 
 const batteryIcons = ["󰂎", "󰁺", "󰁼", "󰁽", "󰁾", "󰁿", "󰁿", "󰂀", "󰂁", "󰂂", "󰁹"];
 const batteryIconsCharging = [
@@ -141,8 +141,13 @@ function artPath(url: string): string {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function setIfChanged(variable: ReactiveVariable, value: string): void {
-    if (variable.value !== value) {
+function setIfChanged<T>(variable: ReactiveVariable<T>, value: T): void {
+    const current = variable.value;
+    const same =
+        value !== null && typeof value === "object"
+            ? JSON.stringify(current) === JSON.stringify(value)
+            : Object.is(current, value);
+    if (!same) {
         variable.set(value);
     }
 }
@@ -181,8 +186,8 @@ function parseJson<T>(value: string, fallback: T): T {
 }
 
 function parsedWspaces(): Wspaces {
-    const value = parseJson<unknown>(wspaces.value, []);
-    return Array.isArray(value) ? (value as Wspaces) : [];
+    const value = wspaces.value;
+    return Array.isArray(value) ? value : [];
 }
 
 const pad2 = (value: number): string => String(value).padStart(2, "0");
@@ -200,29 +205,30 @@ const workspaceViews = new Map<string, WorkspaceView>();
 function renderWorkspaces(view: WorkspaceView): void {
     try {
         const workspaces = parsedWspaces()[view.screen] ?? [];
-        const active = Number(currentWorkspace.value);
-        const showNumbers = metaPressed.value === "true";
+        const active = currentWorkspace.value;
+        const showNumbers = metaPressed.value;
         const signature = workspaces.join(",");
 
         if (signature !== view.signature || view.dots.size !== workspaces.length) {
-            view.handle.clear_children();
-            view.dots.clear();
-
-            for (const id of workspaces) {
-                const dot = Widgets.EventBox()
-                    .properties({
-                        widget_name: `workspace-dot-${id}`,
-                        class: `workspace-dot ${id === active ? "active" : ""}`,
-                        onclick: `hyprctl dispatch 'hl.dsp.focus({ workspace = ${id} })'`,
-                    })
-                    .add_child(
-                        Widgets.Label(showNumbers ? String(id) : " ").properties({
-                            widget_name: `workspace-label-${id}`,
-                        }),
+            view.handle.edit((handle) => {
+                handle.clear_children();
+                for (const id of workspaces) {
+                    handle.append_child(
+                        Widgets.EventBox()
+                            .properties({
+                                widget_name: `workspace-dot-${id}`,
+                                class: `workspace-dot ${id === active ? "active" : ""}`,
+                                onclick: `hyprctl dispatch 'hl.dsp.focus({ workspace = ${id} })'`,
+                            })
+                            .add_child(
+                                Widgets.Label(showNumbers ? String(id) : " ").properties({
+                                    widget_name: `workspace-label-${id}`,
+                                }),
+                            ),
                     );
-
-                view.handle.append_child(dot);
-            }
+                }
+            });
+            view.dots.clear();
 
             view.signature = signature;
             for (const id of workspaces) {
@@ -299,11 +305,11 @@ async function pollHyprland(): Promise<void> {
             list.sort((left, right) => left - right);
         }
 
-        setIfChanged(wspaces, JSON.stringify(grouped));
+        setIfChanged(wspaces, grouped);
     }
 
     if (active && typeof active.id === "number") {
-        setIfChanged(currentWorkspace, String(active.id));
+        setIfChanged(currentWorkspace, active.id);
     }
 }
 
@@ -316,7 +322,7 @@ const musicViews = new Map<string, MusicView>();
 function applyMusicReveal(): void {
     for (const view of [...musicViews.values()]) {
         try {
-            view.reveal.set_property("reveal", musicReveal.value === "true");
+            view.reveal.set_property("reveal", musicReveal.value);
         } catch {
             musicViews.delete(view.instanceId);
         }
@@ -765,7 +771,7 @@ Tools.stream.time((context) => {
 const sleepViews = new Map<string, SleepView>();
 
 function applySleepViews(): void {
-    const active = dontSleep.value === "true";
+    const active = dontSleep.value;
     for (const view of [...sleepViews.values()]) {
         try {
             view.root.set_property(
@@ -785,7 +791,7 @@ function applySleepViews(): void {
 
 dontSleep.on_change(applySleepViews);
 
-const sleepLabel = Widgets.Label(dontSleep.value === "true" ? "󰒳 " : "󰒲 ")
+const sleepLabel = Widgets.Label(dontSleep.value ? "󰒳 " : "󰒲 ")
     .properties({
         widget_name: "dont-sleep-label",
         tooltip: "Allow system to sleep",

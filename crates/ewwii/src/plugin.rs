@@ -502,6 +502,23 @@ impl<B: DisplayBackend> App<B> {
                     }
                     None
                 }
+                WidgetControlType::ReplaceChildren {
+                    instance,
+                    widget,
+                    children,
+                } => {
+                    match ewwii_bunjs::parse_children_json(&children) {
+                        Ok(children) => {
+                            if let Err(err) =
+                                self.replace_instance_children(instance, widget, children)
+                            {
+                                log::error!("Failed to replace widget children: {err}");
+                            }
+                        }
+                        Err(err) => log::error!("Invalid widget children: {err}"),
+                    }
+                    None
+                }
             },
             IpcRequest::Update(var, val) => {
                 let (sender, _recv) = daemon_response::create_pair();
